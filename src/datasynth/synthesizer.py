@@ -2,7 +2,7 @@
 
 import json
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -50,6 +50,7 @@ class DataSynthesizer:
         if provider == "anthropic":
             try:
                 import anthropic
+
                 self._client = anthropic.Anthropic()
                 self._provider = "anthropic"
             except ImportError:
@@ -58,6 +59,7 @@ class DataSynthesizer:
         elif provider == "openai":
             try:
                 import openai
+
                 self._client = openai.OpenAI()
                 self._provider = "openai"
             except ImportError:
@@ -115,8 +117,7 @@ class DataSynthesizer:
 
                 # Select random seed samples for this batch
                 selected_seeds = random.sample(
-                    seed_samples,
-                    min(self.config.seed_sample_count, len(seed_samples))
+                    seed_samples, min(self.config.seed_sample_count, len(seed_samples))
                 )
 
                 # Build prompt
@@ -137,7 +138,7 @@ class DataSynthesizer:
                     samples = parse_generated_samples(response_text, data_schema)
                     all_samples.extend(samples)
 
-                except Exception as e:
+                except Exception:
                     failed += batch_count
                     # Continue with next batch
 
@@ -170,7 +171,7 @@ class DataSynthesizer:
                 "schema": schema,
                 "samples": [
                     {
-                        "id": f"SYNTH_{i+1:04d}",
+                        "id": f"SYNTH_{i + 1:04d}",
                         "data": sample,
                         "synthetic": True,
                     }
@@ -215,10 +216,7 @@ class DataSynthesizer:
         # Load schema
         schema_path = analysis_dir / "04_复刻指南" / "DATA_SCHEMA.json"
         if not schema_path.exists():
-            return SynthesisResult(
-                success=False,
-                error=f"Schema not found: {schema_path}"
-            )
+            return SynthesisResult(success=False, error=f"Schema not found: {schema_path}")
 
         with open(schema_path, "r", encoding="utf-8") as f:
             schema = json.load(f)
@@ -226,10 +224,7 @@ class DataSynthesizer:
         # Load seed samples
         samples_path = analysis_dir / "09_样例数据" / "samples.json"
         if not samples_path.exists():
-            return SynthesisResult(
-                success=False,
-                error=f"Seed samples not found: {samples_path}"
-            )
+            return SynthesisResult(success=False, error=f"Seed samples not found: {samples_path}")
 
         with open(samples_path, "r", encoding="utf-8") as f:
             samples_data = json.load(f)
@@ -242,10 +237,7 @@ class DataSynthesizer:
                 seed_samples.append(s)
 
         if not seed_samples:
-            return SynthesisResult(
-                success=False,
-                error="No seed samples found"
-            )
+            return SynthesisResult(success=False, error="No seed samples found")
 
         # Load guidelines
         guidelines = None
@@ -369,7 +361,7 @@ class InteractiveSynthesizer:
                 "schema": schema,
                 "samples": [
                     {
-                        "id": f"SYNTH_{i+1:04d}",
+                        "id": f"SYNTH_{i + 1:04d}",
                         "data": sample,
                         "synthetic": True,
                     }

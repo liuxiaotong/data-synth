@@ -25,45 +25,23 @@ def main():
 @main.command()
 @click.argument("analysis_dir", type=click.Path(exists=True))
 @click.option(
-    "-o", "--output",
+    "-o",
+    "--output",
     type=click.Path(),
-    help="输出文件路径 (默认: analysis_dir/11_合成数据/synthetic.json)"
+    help="输出文件路径 (默认: analysis_dir/11_合成数据/synthetic.json)",
 )
+@click.option("-n", "--count", type=int, default=100, help="生成数量 (默认: 100)")
+@click.option("-m", "--model", type=str, default="claude-sonnet-4-20250514", help="LLM 模型")
 @click.option(
-    "-n", "--count",
-    type=int,
-    default=100,
-    help="生成数量 (默认: 100)"
-)
-@click.option(
-    "-m", "--model",
-    type=str,
-    default="claude-sonnet-4-20250514",
-    help="LLM 模型"
-)
-@click.option(
-    "-p", "--provider",
+    "-p",
+    "--provider",
     type=click.Choice(["anthropic", "openai"]),
     default="anthropic",
-    help="LLM 提供商"
+    help="LLM 提供商",
 )
-@click.option(
-    "-t", "--temperature",
-    type=float,
-    default=0.8,
-    help="采样温度 (0.0-1.0)"
-)
-@click.option(
-    "--batch-size",
-    type=int,
-    default=5,
-    help="每批生成数量"
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="仅估算成本，不实际生成"
-)
+@click.option("-t", "--temperature", type=float, default=0.8, help="采样温度 (0.0-1.0)")
+@click.option("--batch-size", type=int, default=5, help="每批生成数量")
+@click.option("--dry-run", is_flag=True, help="仅估算成本，不实际生成")
 def generate(
     analysis_dir: str,
     output: Optional[str],
@@ -89,10 +67,12 @@ def generate(
     if dry_run:
         # Just estimate cost
         estimate = config.estimate_cost(count)
-        click.echo(f"成本估算:")
+        click.echo("成本估算:")
         click.echo(f"  目标数量: {estimate['target_count']}")
         click.echo(f"  预计批次: {estimate['estimated_batches']}")
-        click.echo(f"  预计 Token: {estimate['estimated_input_tokens'] + estimate['estimated_output_tokens']:,}")
+        click.echo(
+            f"  预计 Token: {estimate['estimated_input_tokens'] + estimate['estimated_output_tokens']:,}"
+        )
         click.echo(f"  预计成本: ${estimate['estimated_cost_usd']:.2f}")
         click.echo(f"  模型: {estimate['model']}")
         return
@@ -130,29 +110,15 @@ def generate(
 @main.command()
 @click.argument("schema_file", type=click.Path(exists=True))
 @click.argument("seeds_file", type=click.Path(exists=True))
+@click.option("-o", "--output", type=click.Path(), required=True, help="输出文件路径")
+@click.option("-n", "--count", type=int, default=100, help="生成数量")
+@click.option("-m", "--model", type=str, default="claude-sonnet-4-20250514", help="LLM 模型")
 @click.option(
-    "-o", "--output",
-    type=click.Path(),
-    required=True,
-    help="输出文件路径"
-)
-@click.option(
-    "-n", "--count",
-    type=int,
-    default=100,
-    help="生成数量"
-)
-@click.option(
-    "-m", "--model",
-    type=str,
-    default="claude-sonnet-4-20250514",
-    help="LLM 模型"
-)
-@click.option(
-    "-p", "--provider",
+    "-p",
+    "--provider",
     type=click.Choice(["anthropic", "openai"]),
     default="anthropic",
-    help="LLM 提供商"
+    help="LLM 提供商",
 )
 def create(
     schema_file: str,
@@ -193,7 +159,7 @@ def create(
         click.echo("✗ 种子数据为空", err=True)
         sys.exit(1)
 
-    click.echo(f"正在生成合成数据...")
+    click.echo("正在生成合成数据...")
     click.echo(f"  Schema: {schema_file}")
     click.echo(f"  种子数量: {len(seed_samples)}")
     click.echo(f"  目标数量: {count}")
@@ -222,17 +188,8 @@ def create(
 
 @main.command()
 @click.argument("analysis_dir", type=click.Path(exists=True))
-@click.option(
-    "-n", "--count",
-    type=int,
-    default=10,
-    help="生成数量"
-)
-@click.option(
-    "-o", "--output",
-    type=click.Path(),
-    help="Prompt 输出路径"
-)
+@click.option("-n", "--count", type=int, default=10, help="生成数量")
+@click.option("-o", "--output", type=click.Path(), help="Prompt 输出路径")
 def prepare(
     analysis_dir: str,
     count: int,
@@ -291,24 +248,14 @@ def prepare(
 
 
 @main.command()
-@click.option(
-    "-n", "--count",
-    type=int,
-    default=100,
-    help="目标数量"
-)
-@click.option(
-    "-m", "--model",
-    type=str,
-    default="claude-sonnet-4-20250514",
-    help="模型"
-)
+@click.option("-n", "--count", type=int, default=100, help="目标数量")
+@click.option("-m", "--model", type=str, default="claude-sonnet-4-20250514", help="模型")
 def estimate(count: int, model: str):
     """估算生成成本"""
     config = SynthesisConfig(target_count=count, model=model)
     estimate = config.estimate_cost()
 
-    click.echo(f"成本估算:")
+    click.echo("成本估算:")
     click.echo(f"  目标数量: {estimate['target_count']}")
     click.echo(f"  预计批次: {estimate['estimated_batches']}")
     click.echo(f"  预计输入 Token: {estimate['estimated_input_tokens']:,}")

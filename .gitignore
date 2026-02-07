@@ -34,3 +34,18 @@ Thumbs.db
 
 # Environment
 .env
+.env.local
+
+# ===================
+# Supplemented common patterns
+# ===================
+
+# Python wheels
+*.whl
+
+# Virtual environments
+env/
+
+# Linting / type checking
+.mypy_cache/
+.ruff_cache/

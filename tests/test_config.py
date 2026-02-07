@@ -1,7 +1,5 @@
 """Tests for configuration."""
 
-import pytest
-
 from datasynth.config import DataSchema, SchemaField, SynthesisConfig
 
 

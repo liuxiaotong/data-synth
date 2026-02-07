@@ -8,6 +8,7 @@ try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
     from mcp.types import Tool, TextContent
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
@@ -131,10 +132,7 @@ def create_server() -> "Server":
             # Load schema
             schema_path = analysis_dir / "04_复刻指南" / "DATA_SCHEMA.json"
             if not schema_path.exists():
-                return [TextContent(
-                    type="text",
-                    text=f"Schema 未找到: {schema_path}"
-                )]
+                return [TextContent(type="text", text=f"Schema 未找到: {schema_path}")]
 
             with open(schema_path, "r", encoding="utf-8") as f:
                 schema = json.load(f)
@@ -142,10 +140,7 @@ def create_server() -> "Server":
             # Load seeds
             samples_path = analysis_dir / "09_样例数据" / "samples.json"
             if not samples_path.exists():
-                return [TextContent(
-                    type="text",
-                    text=f"种子数据未找到: {samples_path}"
-                )]
+                return [TextContent(type="text", text=f"种子数据未找到: {samples_path}")]
 
             with open(samples_path, "r", encoding="utf-8") as f:
                 samples_data = json.load(f)
@@ -164,14 +159,16 @@ def create_server() -> "Server":
                 count=count,
             )
 
-            return [TextContent(
-                type="text",
-                text=f"## 合成 Prompt\n\n"
-                     f"请使用以下 Prompt 生成 {count} 条数据，然后使用 parse_synthesis_result 解析结果。\n\n"
-                     f"---\n\n{result['prompt']}\n\n---\n\n"
-                     f"Schema 路径: {schema_path}\n"
-                     f"建议输出路径: {analysis_dir}/11_合成数据/synthetic.json"
-            )]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"## 合成 Prompt\n\n"
+                    f"请使用以下 Prompt 生成 {count} 条数据，然后使用 parse_synthesis_result 解析结果。\n\n"
+                    f"---\n\n{result['prompt']}\n\n---\n\n"
+                    f"Schema 路径: {schema_path}\n"
+                    f"建议输出路径: {analysis_dir}/11_合成数据/synthetic.json",
+                )
+            ]
 
         elif name == "parse_synthesis_result":
             response_text = arguments["response_text"]
@@ -189,17 +186,16 @@ def create_server() -> "Server":
             )
 
             if result.success:
-                return [TextContent(
-                    type="text",
-                    text=f"✓ 合成数据已保存:\n"
-                         f"- 输出路径: {result.output_path}\n"
-                         f"- 生成数量: {result.generated_count}"
-                )]
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"✓ 合成数据已保存:\n"
+                        f"- 输出路径: {result.output_path}\n"
+                        f"- 生成数量: {result.generated_count}",
+                    )
+                ]
             else:
-                return [TextContent(
-                    type="text",
-                    text=f"解析失败: {result.error}"
-                )]
+                return [TextContent(type="text", text=f"解析失败: {result.error}")]
 
         elif name == "synthesize_data":
             config = SynthesisConfig(
@@ -216,21 +212,20 @@ def create_server() -> "Server":
             )
 
             if result.success:
-                return [TextContent(
-                    type="text",
-                    text=f"✓ 合成完成:\n"
-                         f"- 输出路径: {result.output_path}\n"
-                         f"- 生成数量: {result.generated_count}\n"
-                         f"- 失败数量: {result.failed_count}\n"
-                         f"- Token 用量: {result.total_tokens:,}\n"
-                         f"- 预计成本: ${result.estimated_cost:.4f}\n"
-                         f"- 耗时: {result.duration_seconds:.1f}s"
-                )]
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"✓ 合成完成:\n"
+                        f"- 输出路径: {result.output_path}\n"
+                        f"- 生成数量: {result.generated_count}\n"
+                        f"- 失败数量: {result.failed_count}\n"
+                        f"- Token 用量: {result.total_tokens:,}\n"
+                        f"- 预计成本: ${result.estimated_cost:.4f}\n"
+                        f"- 耗时: {result.duration_seconds:.1f}s",
+                    )
+                ]
             else:
-                return [TextContent(
-                    type="text",
-                    text=f"合成失败: {result.error}"
-                )]
+                return [TextContent(type="text", text=f"合成失败: {result.error}")]
 
         elif name == "estimate_synthesis_cost":
             config = SynthesisConfig(
@@ -239,21 +234,20 @@ def create_server() -> "Server":
             )
             estimate = config.estimate_cost()
 
-            return [TextContent(
-                type="text",
-                text=f"成本估算:\n"
-                     f"- 目标数量: {estimate['target_count']}\n"
-                     f"- 预计批次: {estimate['estimated_batches']}\n"
-                     f"- 预计 Token: {estimate['estimated_input_tokens'] + estimate['estimated_output_tokens']:,}\n"
-                     f"- 预计成本: ${estimate['estimated_cost_usd']:.2f}\n"
-                     f"- 模型: {estimate['model']}"
-            )]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"成本估算:\n"
+                    f"- 目标数量: {estimate['target_count']}\n"
+                    f"- 预计批次: {estimate['estimated_batches']}\n"
+                    f"- 预计 Token: {estimate['estimated_input_tokens'] + estimate['estimated_output_tokens']:,}\n"
+                    f"- 预计成本: ${estimate['estimated_cost_usd']:.2f}\n"
+                    f"- 模型: {estimate['model']}",
+                )
+            ]
 
         else:
-            return [TextContent(
-                type="text",
-                text=f"未知工具: {name}"
-            )]
+            return [TextContent(type="text", text=f"未知工具: {name}")]
 
     return server
 
@@ -271,6 +265,7 @@ async def serve():
 def main():
     """主入口."""
     import asyncio
+
     asyncio.run(serve())
 
 

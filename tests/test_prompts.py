@@ -15,17 +15,19 @@ from datasynth.prompts import (
 @pytest.fixture
 def sample_schema():
     """Sample schema for testing."""
-    return DataSchema.from_dict({
-        "project_name": "测试项目",
-        "fields": [
-            {"name": "instruction", "display_name": "指令", "type": "text"},
-            {"name": "response", "display_name": "回复", "type": "text"},
-        ],
-        "scoring_rubric": [
-            {"score": 1, "label": "差"},
-            {"score": 3, "label": "好"},
-        ],
-    })
+    return DataSchema.from_dict(
+        {
+            "project_name": "测试项目",
+            "fields": [
+                {"name": "instruction", "display_name": "指令", "type": "text"},
+                {"name": "response", "display_name": "回复", "type": "text"},
+            ],
+            "scoring_rubric": [
+                {"score": 1, "label": "差"},
+                {"score": 3, "label": "好"},
+            ],
+        }
+    )
 
 
 @pytest.fixture
@@ -106,11 +108,11 @@ class TestExtractJsonArray:
 
     def test_code_block(self):
         """Test extraction from code block."""
-        text = '''Here is the data:
+        text = """Here is the data:
 ```json
 [{"a": 1}, {"a": 2}]
 ```
-'''
+"""
         result = extract_json_array(text)
         assert result == '[{"a": 1}, {"a": 2}]'
 
@@ -153,14 +155,14 @@ class TestParseGeneratedSamples:
 
     def test_parse_array(self, sample_schema):
         """Test parsing JSON array."""
-        response = '''
+        response = """
 ```json
 [
   {"instruction": "问题1", "response": "回答1"},
   {"instruction": "问题2", "response": "回答2"}
 ]
 ```
-'''
+"""
         samples = parse_generated_samples(response, sample_schema)
 
         assert len(samples) == 2
@@ -168,25 +170,25 @@ class TestParseGeneratedSamples:
 
     def test_parse_with_extra_text(self, sample_schema):
         """Test parsing with surrounding text."""
-        response = '''
+        response = """
 Here are the generated samples:
 
 [{"instruction": "问题", "response": "回答"}]
 
 Hope this helps!
-'''
+"""
         samples = parse_generated_samples(response, sample_schema)
 
         assert len(samples) == 1
 
     def test_filter_invalid_samples(self, sample_schema):
         """Test filtering invalid samples."""
-        response = '''
+        response = """
 [
   {"instruction": "valid", "response": "valid"},
   {"unrelated_field": "invalid"}
 ]
-'''
+"""
         samples = parse_generated_samples(response, sample_schema)
 
         assert len(samples) == 1

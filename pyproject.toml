@@ -5,22 +5,25 @@ build-backend = "hatchling.build"
 [project]
 name = "knowlyr-datasynth"
 version = "0.1.0"
-description = "数据合成工具 - 基于种子数据批量生成高质量训练数据"
+description = "Data synthesis toolkit - batch generate high-quality training data from seed examples using LLMs"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "liukai" }
+    { name = "Liu Kai", email = "mrliukai@gmail.com" }
 ]
 keywords = ["synthesis", "data-generation", "llm", "machine-learning"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 dependencies = [
@@ -42,6 +45,12 @@ knowlyr-datasynth = "datasynth.cli:main"
 
 [project.entry-points."mcp.servers"]
 knowlyr-datasynth = "datasynth.mcp_server:serve"
+
+[project.urls]
+Homepage = "https://github.com/liuxiaotong/data-synth"
+Documentation = "https://github.com/liuxiaotong/data-synth#readme"
+Repository = "https://github.com/liuxiaotong/data-synth"
+Issues = "https://github.com/liuxiaotong/data-synth/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/datasynth"]

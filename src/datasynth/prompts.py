@@ -67,22 +67,26 @@ def build_synthesis_prompt(
     ]
 
     if guidelines:
-        prompt_parts.extend([
-            "## 额外指南",
-            "",
-            guidelines[:2000],  # Truncate if too long
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "## 额外指南",
+                "",
+                guidelines[:2000],  # Truncate if too long
+                "",
+            ]
+        )
 
-    prompt_parts.extend([
-        "## 输出格式",
-        "",
-        "请以 JSON 数组格式输出，每个元素是一条数据：",
-        "",
-        "```json",
-        "[",
-        "  {",
-    ])
+    prompt_parts.extend(
+        [
+            "## 输出格式",
+            "",
+            "请以 JSON 数组格式输出，每个元素是一条数据：",
+            "",
+            "```json",
+            "[",
+            "  {",
+        ]
+    )
 
     # Add field placeholders
     field_examples = []
@@ -91,14 +95,16 @@ def build_synthesis_prompt(
             field_examples.append(f'    "{f.name}": "..."')
 
     prompt_parts.append(",\n".join(field_examples))
-    prompt_parts.extend([
-        "  },",
-        "  ...",
-        "]",
-        "```",
-        "",
-        "现在请生成数据：",
-    ])
+    prompt_parts.extend(
+        [
+            "  },",
+            "  ...",
+            "]",
+            "```",
+            "",
+            "现在请生成数据：",
+        ]
+    )
 
     return "\n".join(prompt_parts)
 
@@ -234,7 +240,6 @@ PROMPT_TEMPLATES = {
 ]
 ```
 """,
-
     "preference": """
 # 偏好数据生成
 
@@ -259,7 +264,6 @@ PROMPT_TEMPLATES = {
 ]
 ```
 """,
-
     "multi_turn": """
 # 多轮对话数据生成
 
