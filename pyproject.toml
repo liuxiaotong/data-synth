@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     { name = "Liu Kai", email = "mrliukai@gmail.com" }
 ]
-keywords = ["synthesis", "data-generation", "llm", "machine-learning"]
+keywords = ["synthetic-data", "data-generation", "data-synthesis", "llm", "machine-learning", "training-data", "ai"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
