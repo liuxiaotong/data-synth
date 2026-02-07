@@ -2,9 +2,10 @@
 
 # DataSynth
 
-**数据合成工具 - 基于种子数据批量生成高质量训练数据**
+**数据合成工具 - 基于种子数据批量生成高质量训练数据**  
+**Seed-to-scale synthetic data engine built for LLM workflows**
 
-[![PyPI](https://img.shields.io/pypi/v/datasynth?color=blue)](https://pypi.org/project/datasynth/)
+[![PyPI](https://img.shields.io/pypi/v/knowlyr-datasynth?color=blue)](https://pypi.org/project/knowlyr-datasynth/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-4_Tools-purple.svg)](#mcp-server)
@@ -15,15 +16,36 @@
 
 ---
 
+**GitHub Topics**: `synthetic-data`, `llm`, `data-generation`, `mcp`, `data-pipeline`
+
 基于少量种子数据和 Schema 定义，使用 LLM 批量生成高质量训练数据。支持 API 模式和交互模式。
 
-## 核心能力
+## 核心能力 / Core Capabilities
 
 ```
 Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质检筛选
 ```
 
-### 解决的问题
+### 输入 / 输出示例 / Input & Output Samples
+
+```jsonc
+// seed.json
+{
+  "schema": {
+    "fields": [
+      {"name": "instruction", "type": "text"},
+      {"name": "response", "type": "text"},
+      {"name": "quality", "type": "int", "range": [1,5]}
+    ]
+  },
+  "samples": [{"instruction": "解释 COT", "response": "Chain-of-thought...", "quality": 5}]
+}
+
+// output/11_合成数据/synthetic.json
+[{"instruction": "给出反事实...", "response": "...", "quality": 4 }]
+```
+
+### 解决的问题 / Problems Solved
 
 | 痛点 | 传统方案 | DataSynth |
 |------|----------|-----------|
@@ -32,42 +54,42 @@ Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质
 | **规模** | 需要招人、培训 | 按需弹性生成 |
 | **一致性** | 标注员理解差异 | 规则 + 模板保证一致 |
 
-### 工作模式
+### 工作模式 / Modes
 
 | 模式 | 说明 | 适用场景 |
 |------|------|----------|
 | **API 模式** | 直接调用 LLM API | 有 API key，批量生成 |
 | **交互模式** | 生成 Prompt，手动调用 | Claude Code 中使用，无需 API key |
 
-## 安装
+## 安装 / Installation
 
 ```bash
-pip install datasynth
+pip install knowlyr-datasynth
 ```
 
 可选依赖：
 
 ```bash
-pip install datasynth[anthropic]  # Anthropic Claude
-pip install datasynth[openai]     # OpenAI GPT
-pip install datasynth[llm]        # 两者都装
-pip install datasynth[mcp]        # MCP 服务器
-pip install datasynth[all]        # 全部功能
+pip install knowlyr-datasynth[anthropic]  # Anthropic Claude
+pip install knowlyr-datasynth[openai]     # OpenAI GPT
+pip install knowlyr-datasynth[llm]        # 两者都装
+pip install knowlyr-datasynth[mcp]        # MCP 服务器
+pip install knowlyr-datasynth[all]        # 全部功能
 ```
 
-## 快速开始
+## 快速开始 / Quick Start
 
-### API 模式 (需要 API key)
+### API 模式 (需要 API key) / API Mode
 
 ```bash
 # 设置 API key
 export ANTHROPIC_API_KEY=your_key
 
 # 从 DataRecipe 分析结果生成
-datasynth generate ./analysis_output/my_dataset/ -n 100
+knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 100
 
 # 估算成本
-datasynth generate ./analysis_output/my_dataset/ -n 1000 --dry-run
+knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 1000 --dry-run
 ```
 
 <details>
@@ -88,11 +110,11 @@ datasynth generate ./analysis_output/my_dataset/ -n 1000 --dry-run
 
 </details>
 
-### 交互模式 (无需 API key)
+### 交互模式 (无需 API key) / Interactive Mode
 
 ```bash
 # 生成 Prompt
-datasynth prepare ./analysis_output/my_dataset/ -n 10
+knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 
 # 将 Prompt 复制到 Claude，获取结果后解析
 ```
@@ -101,10 +123,10 @@ datasynth prepare ./analysis_output/my_dataset/ -n 10
 
 ---
 
-## 成本估算
+## 成本估算 / Costing
 
 ```bash
-datasynth estimate -n 1000
+knowlyr-datasynth estimate -n 1000
 ```
 
 ```
@@ -117,7 +139,7 @@ datasynth estimate -n 1000
   模型: claude-sonnet-4-20250514
 ```
 
-### 不同规模的成本参考
+### 不同规模的成本参考 / Scale Reference
 
 | 数量 | 预计成本 | 预计时间 |
 |------|----------|----------|
@@ -125,16 +147,30 @@ datasynth estimate -n 1000
 | 1,000 | ~$10 | ~10 分钟 |
 | 10,000 | ~$100 | ~2 小时 |
 
+### 质量闭环 / Quality Loop
+
+```
+DataRecipe 输出 (Schema + Rubric)
+      ↓
+DataLabel 人工校准 50 条种子
+      ↓
+DataSynth 批量合成
+      ↓
+DataCheck 质检 + 回写报告
+```
+
+在 CLI 中可通过 `knowlyr-datasynth generate ... --post-hook "knowlyr-datacheck validate {analysis_dir}"` 自动触发后置质检。
+
 ---
 
-## 交互模式
+## 交互模式 / Interactive Workflow
 
 交互模式适合在 Claude Code 中使用，不需要 API key：
 
 ### 步骤 1: 准备 Prompt
 
 ```bash
-datasynth prepare ./analysis_output/my_dataset/ -n 10
+knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 ```
 
 ### 步骤 2: 将 Prompt 发送给 Claude
@@ -147,18 +183,46 @@ datasynth prepare ./analysis_output/my_dataset/ -n 10
 
 ---
 
-## MCP Server
+## Prompt 指南 / Prompt Guide
+
+### 模板 / Template
+
+```
+You are a data generation engine...
+- Field definitions: {{schema}}
+- Style guide: {{rubric}}
+- Examples ({{seed_count}}): {{seed_examples}}
+Generate {{batch_size}} samples in JSONL format.
+```
+
+- `batch_size` 建议 ≤20，过大容易触发限流或超时。
+- 根据任务敏感度添加「不得输出 PII / 不得引用真实用户」等约束，降低审查失败概率。
+- 冗长 schema 可分块粘贴 (`schema://chunk/<n>`) 以保持 Prompt < 8k tokens。
+
+### 失败重试策略 / Retry Strategy
+
+```bash
+knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
+```
+
+- `--max-retries`：应对 429/5xx。
+- `--retry-delay`：大型模型常见 2-5 秒冷却时间。
+- `--temperature`：偏低→一致性，偏高→多样性；可在重试时递增 0.05。
+
+---
+
+## MCP Server / Claude Integration
 
 在 Claude Desktop / Claude Code 中直接使用。
 
-### 配置
+### 配置 / Config
 
 添加到 `~/Library/Application Support/Claude/claude_desktop_config.json`：
 
 ```json
 {
   "mcpServers": {
-    "datasynth": {
+    "knowlyr-datasynth": {
       "command": "uv",
       "args": ["--directory", "/path/to/data-synth", "run", "python", "-m", "datasynth.mcp_server"]
     }
@@ -166,7 +230,7 @@ datasynth prepare ./analysis_output/my_dataset/ -n 10
 }
 ```
 
-### 可用工具
+### 可用工具 / Tools
 
 | 工具 | 功能 |
 |------|------|
@@ -175,7 +239,7 @@ datasynth prepare ./analysis_output/my_dataset/ -n 10
 | `synthesize_data` | 直接调用 LLM 生成（需要 API key） |
 | `estimate_synthesis_cost` | 估算生成成本 |
 
-### 使用示例 (交互模式)
+### 使用示例 (交互模式) / Usage Example
 
 ```
 用户: 帮我基于 ./output/SVGEditBench 生成 20 条合成数据
@@ -193,7 +257,7 @@ Claude: [调用 prepare_synthesis]
 
 ---
 
-## Data Pipeline 生态
+## Data Pipeline 生态 / Ecosystem
 
 DataSynth 是 Data Pipeline 生态的合成组件：
 
@@ -220,40 +284,40 @@ DataSynth 是 Data Pipeline 生态的合成组件：
 | **DataSynth** | 数据合成扩充 | [data-synth](https://github.com/liuxiaotong/data-synth) |
 | **DataCheck** | 数据质量检查 | [data-check](https://github.com/liuxiaotong/data-check) |
 
-### 端到端工作流
+### 端到端工作流 / End-to-end Flow
 
 ```bash
 # 1. DataRecipe: 分析数据集，生成 Schema 和样例
-datarecipe deep-analyze tencent/CL-bench -o ./output
+knowlyr-datarecipe deep-analyze tencent/CL-bench -o ./output
 
 # 2. DataLabel: 生成标注界面，人工标注/校准种子数据
-datalabel generate ./output/tencent_CL-bench/
+knowlyr-datalabel generate ./output/tencent_CL-bench/
 
 # 3. DataSynth: 基于种子数据批量合成
-datasynth generate ./output/tencent_CL-bench/ -n 1000
+knowlyr-datasynth generate ./output/tencent_CL-bench/ -n 1000
 
 # 4. DataCheck: 质量检查
-datacheck validate ./output/tencent_CL-bench/
+knowlyr-datacheck validate ./output/tencent_CL-bench/
 ```
 
-### 四合一 MCP 配置
+### 四合一 MCP 配置 / Quad MCP Config
 
 ```json
 {
   "mcpServers": {
-    "datarecipe": {
+    "knowlyr-datarecipe": {
       "command": "uv",
-      "args": ["--directory", "/path/to/data-recipe", "run", "datarecipe-mcp"]
+      "args": ["--directory", "/path/to/data-recipe", "run", "knowlyr-datarecipe-mcp"]
     },
-    "datalabel": {
+    "knowlyr-datalabel": {
       "command": "uv",
       "args": ["--directory", "/path/to/data-label", "run", "python", "-m", "datalabel.mcp_server"]
     },
-    "datasynth": {
+    "knowlyr-datasynth": {
       "command": "uv",
       "args": ["--directory", "/path/to/data-synth", "run", "python", "-m", "datasynth.mcp_server"]
     },
-    "datacheck": {
+    "knowlyr-datacheck": {
       "command": "uv",
       "args": ["--directory", "/path/to/data-check", "run", "python", "-m", "datacheck.mcp_server"]
     }
@@ -267,11 +331,11 @@ datacheck validate ./output/tencent_CL-bench/
 
 | 命令 | 功能 |
 |------|------|
-| `datasynth generate <dir>` | 从 DataRecipe 分析结果生成 (API 模式) |
-| `datasynth generate <dir> --dry-run` | 仅估算成本 |
-| `datasynth create <schema> <seeds> -o <out>` | 从自定义文件生成 |
-| `datasynth prepare <dir>` | 准备 Prompt (交互模式) |
-| `datasynth estimate -n <count>` | 估算成本 |
+| `knowlyr-datasynth generate <dir>` | 从 DataRecipe 分析结果生成 (API 模式) |
+| `knowlyr-datasynth generate <dir> --dry-run` | 仅估算成本 |
+| `knowlyr-datasynth create <schema> <seeds> -o <out>` | 从自定义文件生成 |
+| `knowlyr-datasynth prepare <dir>` | 准备 Prompt (交互模式) |
+| `knowlyr-datasynth estimate -n <count>` | 估算成本 |
 
 ### 生成选项
 
@@ -326,6 +390,24 @@ src/datasynth/
 ## License
 
 [MIT](LICENSE)
+
+---
+
+## AI Data Pipeline 生态
+
+> 5 个工具覆盖 AI 数据工程全流程，均支持 CLI + MCP，可独立使用也可组合成流水线。
+
+| Tool | Description | Link |
+|------|-------------|------|
+| **AI Dataset Radar** | Competitive intelligence for AI training datasets | [GitHub](https://github.com/liuxiaotong/ai-dataset-radar) |
+| **DataRecipe** | Reverse-engineer datasets into annotation specs & cost models | [GitHub](https://github.com/liuxiaotong/data-recipe) |
+| **DataSynth** | Seed-to-scale synthetic data generation | You are here |
+| **DataLabel** | Lightweight, serverless HTML labeling tool | [GitHub](https://github.com/liuxiaotong/data-label) |
+| **DataCheck** | Automated quality checks & anomaly detection | [GitHub](https://github.com/liuxiaotong/data-check) |
+
+```
+Radar (发现) → Recipe (分析) → Synth (合成) → Label (标注) → Check (质检)
+```
 
 ---
 

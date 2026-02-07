@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "datasynth"
+name = "knowlyr-datasynth"
 version = "0.1.0"
 description = "数据合成工具 - 基于种子数据批量生成高质量训练数据"
 readme = "README.md"
@@ -35,13 +35,13 @@ openai = ["openai>=1.0"]
 llm = ["anthropic>=0.18", "openai>=1.0"]
 mcp = ["mcp>=1.0"]
 dev = ["pytest", "ruff"]
-all = ["datasynth[llm,mcp,dev]"]
+all = ["knowlyr-datasynth[llm,mcp,dev]"]
 
 [project.scripts]
-datasynth = "datasynth.cli:main"
+knowlyr-datasynth = "datasynth.cli:main"
 
 [project.entry-points."mcp.servers"]
-datasynth = "datasynth.mcp_server:serve"
+knowlyr-datasynth = "datasynth.mcp_server:serve"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/datasynth"]
