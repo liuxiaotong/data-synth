@@ -694,6 +694,97 @@ class TestDataSynthesizer:
         cost = s._estimate_cost(10000)
         assert cost > 0
 
+    def test_synthesize_populates_stats(self, tmp_path):
+        """Test that synthesize populates result.stats."""
+        cfg = SynthesisConfig(target_count=2, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 500))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+        )
+
+        assert result.success
+        assert result.stats is not None
+        assert result.stats["total_samples"] == 2
+        assert "instruction" in result.stats["fields"]
+        assert "response" in result.stats["fields"]
+        assert result.stats["fields"]["instruction"]["type"] == "text"
+        assert result.stats["fields"]["instruction"]["count"] == 2
+
+
+class TestComputeStats:
+    """Tests for DataSynthesizer._compute_stats."""
+
+    def _schema(self, fields):
+        from datasynth.config import DataSchema
+        return DataSchema.from_dict({"project_name": "test", "fields": fields})
+
+    def test_text_fields(self):
+        schema = self._schema([{"name": "q", "type": "text"}, {"name": "a", "type": "text"}])
+        samples = [
+            {"q": "hello", "a": "world"},
+            {"q": "hi", "a": "there!"},
+        ]
+        stats = DataSynthesizer._compute_stats(samples, schema)
+
+        assert stats["total_samples"] == 2
+        q = stats["fields"]["q"]
+        assert q["type"] == "text"
+        assert q["count"] == 2
+        assert q["missing"] == 0
+        assert q["avg_length"] == 3.5  # (5+2)/2
+        assert q["min_length"] == 2
+        assert q["max_length"] == 5
+
+    def test_numeric_fields_with_distribution(self):
+        schema = self._schema([{"name": "score", "type": "int"}])
+        samples = [{"score": 3}, {"score": 5}, {"score": 3}, {"score": 4}]
+        stats = DataSynthesizer._compute_stats(samples, schema)
+
+        s = stats["fields"]["score"]
+        assert s["type"] == "numeric"
+        assert s["min"] == 3
+        assert s["max"] == 5
+        assert s["avg"] == 3.75
+        assert s["distribution"] == {"3": 2, "4": 1, "5": 1}
+
+    def test_list_fields(self):
+        schema = self._schema([{"name": "tags", "type": "list"}])
+        samples = [{"tags": ["a", "b"]}, {"tags": ["x"]}]
+        stats = DataSynthesizer._compute_stats(samples, schema)
+
+        t = stats["fields"]["tags"]
+        assert t["type"] == "list"
+        assert t["avg_items"] == 1.5
+        assert t["min_items"] == 1
+        assert t["max_items"] == 2
+
+    def test_missing_values(self):
+        schema = self._schema([{"name": "q", "type": "text"}, {"name": "note", "type": "text"}])
+        samples = [{"q": "hi"}, {"q": "hello", "note": "ok"}]
+        stats = DataSynthesizer._compute_stats(samples, schema)
+
+        assert stats["fields"]["note"]["count"] == 1
+        assert stats["fields"]["note"]["missing"] == 1
+
+    def test_empty_samples(self):
+        schema = self._schema([{"name": "q", "type": "text"}])
+        stats = DataSynthesizer._compute_stats([], schema)
+        assert stats["total_samples"] == 0
+        assert stats["fields"]["q"]["count"] == 0
+
+    def test_mixed_types(self):
+        schema = self._schema([{"name": "val", "type": "text"}])
+        samples = [{"val": "string"}, {"val": 123}]
+        stats = DataSynthesizer._compute_stats(samples, schema)
+        assert stats["fields"]["val"]["type"] == "mixed"
+
 
 class TestInteractiveSynthesizer:
     def test_prepare_synthesis(self):

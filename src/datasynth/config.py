@@ -33,12 +33,36 @@ class SynthesisConfig:
     seed_sample_count: int = 3
     data_type: str = "auto"  # auto, instruction_response, preference, multi_turn
 
-    # Cost tracking
-    input_token_cost: float = 0.003  # per 1K tokens
-    output_token_cost: float = 0.015  # per 1K tokens
-
     # Generation constraints
     max_tokens_per_sample: int = 2000
+
+    # Model pricing (input_per_1k, output_per_1k)
+    MODEL_PRICING: Dict[str, tuple] = field(default_factory=lambda: {}, repr=False)
+
+    @staticmethod
+    def _get_pricing(model: str) -> tuple[float, float]:
+        """Get (input_cost_per_1k, output_cost_per_1k) for a model."""
+        # Pricing table: model pattern → (input/1K, output/1K)
+        pricing = {
+            # Anthropic
+            "claude-opus": (0.015, 0.075),
+            "claude-sonnet": (0.003, 0.015),
+            "claude-haiku": (0.00025, 0.00125),
+            # OpenAI
+            "gpt-4o-mini": (0.00015, 0.0006),
+            "gpt-4o": (0.0025, 0.01),
+            "gpt-4-turbo": (0.01, 0.03),
+            "gpt-4": (0.03, 0.06),
+            "gpt-3.5": (0.0005, 0.0015),
+            "o1-mini": (0.003, 0.012),
+            "o1": (0.015, 0.06),
+        }
+        model_lower = model.lower()
+        for pattern, costs in pricing.items():
+            if pattern in model_lower:
+                return costs
+        # Default fallback
+        return (0.003, 0.015)
 
     def estimate_cost(self, target_count: Optional[int] = None) -> Dict[str, Any]:
         """Estimate generation cost.
@@ -56,8 +80,9 @@ class SynthesisConfig:
         total_input = batches * avg_input_tokens
         total_output = batches * avg_output_tokens
 
-        input_cost = (total_input / 1000) * self.input_token_cost
-        output_cost = (total_output / 1000) * self.output_token_cost
+        input_price, output_price = self._get_pricing(self.model)
+        input_cost = (total_input / 1000) * input_price
+        output_cost = (total_output / 1000) * output_price
 
         return {
             "target_count": count,

@@ -55,7 +55,7 @@ class TestVersion:
     def test_version(self, runner):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.2.1" in result.output
+        assert "0.3.0" in result.output
 
 
 class TestEstimate:
@@ -419,6 +419,67 @@ class TestCreate:
         assert result.exit_code == 0
         call_kwargs = MockSynth.return_value.synthesize.call_args[1]
         assert call_kwargs["resume"] is True
+
+
+class TestStats:
+    def test_generate_with_stats(self, runner, datarecipe_dir):
+        output_dir = datarecipe_dir / "11_合成数据"
+        output_dir.mkdir()
+        mock_result = SynthesisResult(
+            success=True,
+            output_path=str(output_dir / "synthetic.json"),
+            generated_count=5,
+            failed_count=0,
+            total_tokens=1000,
+            estimated_cost=0.01,
+            duration_seconds=1.0,
+            stats={"total_samples": 5, "fields": {"instruction": {"count": 5}}},
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            result = runner.invoke(
+                main,
+                ["generate", str(datarecipe_dir), "-n", "5", "--stats"],
+            )
+
+        assert result.exit_code == 0
+        assert "统计报告" in result.output
+        stats_path = datarecipe_dir / "11_合成数据" / "synthetic.stats.json"
+        assert stats_path.exists()
+        import json
+        stats = json.loads(stats_path.read_text(encoding="utf-8"))
+        assert stats["total_samples"] == 5
+
+    def test_create_with_stats(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"project_name": "T", "fields": [{"name": "text", "type": "text"}]}),
+            encoding="utf-8",
+        )
+
+        seeds_file = tmp_path / "seeds.json"
+        seeds_file.write_text(json.dumps([{"text": "hello"}]), encoding="utf-8")
+
+        out = tmp_path / "out.json"
+        mock_result = SynthesisResult(
+            success=True,
+            output_path=str(out),
+            generated_count=3,
+            stats={"total_samples": 3, "fields": {"text": {"count": 3}}},
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize.return_value = mock_result
+            result = runner.invoke(
+                main,
+                ["create", str(schema_file), str(seeds_file), "-o", str(out), "-n", "3", "--stats"],
+            )
+
+        assert result.exit_code == 0
+        assert "统计报告" in result.output
+        stats_path = tmp_path / "out.stats.json"
+        assert stats_path.exists()
 
 
 class TestVerbose:

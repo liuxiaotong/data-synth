@@ -35,6 +35,7 @@ class SynthesisResult:
     total_tokens: int = 0
     estimated_cost: float = 0.0
     duration_seconds: float = 0.0
+    stats: Dict[str, Any] | None = None
 
 
 class DataSynthesizer:
@@ -56,6 +57,58 @@ class DataSynthesizer:
     def _fingerprint(sample: Dict[str, Any]) -> str:
         """Create a dedup key from a sample by sorting and serializing."""
         return json.dumps(sample, sort_keys=True, ensure_ascii=False)
+
+    @staticmethod
+    def _compute_stats(
+        samples: List[Dict[str, Any]], schema: DataSchema
+    ) -> Dict[str, Any]:
+        """Compute distribution statistics for generated samples."""
+        stats: Dict[str, Any] = {"total_samples": len(samples), "fields": {}}
+
+        field_names = [f.name for f in schema.fields if f.name not in ("id", "metadata")]
+        for fname in field_names:
+            values = [s.get(fname) for s in samples if fname in s]
+            field_stat: Dict[str, Any] = {"count": len(values), "missing": len(samples) - len(values)}
+
+            if not values:
+                stats["fields"][fname] = field_stat
+                continue
+
+            # String fields: length stats
+            if all(isinstance(v, str) for v in values):
+                lengths = [len(v) for v in values]
+                field_stat["type"] = "text"
+                field_stat["avg_length"] = round(sum(lengths) / len(lengths), 1)
+                field_stat["min_length"] = min(lengths)
+                field_stat["max_length"] = max(lengths)
+
+            # Numeric fields: value stats
+            elif all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+                field_stat["type"] = "numeric"
+                field_stat["min"] = min(values)
+                field_stat["max"] = max(values)
+                field_stat["avg"] = round(sum(values) / len(values), 2)
+                # Value distribution for integers with small range
+                if all(isinstance(v, int) for v in values) and (max(values) - min(values)) <= 20:
+                    dist = {}
+                    for v in values:
+                        dist[str(v)] = dist.get(str(v), 0) + 1
+                    field_stat["distribution"] = dict(sorted(dist.items()))
+
+            # List fields
+            elif all(isinstance(v, list) for v in values):
+                lengths = [len(v) for v in values]
+                field_stat["type"] = "list"
+                field_stat["avg_items"] = round(sum(lengths) / len(lengths), 1)
+                field_stat["min_items"] = min(lengths)
+                field_stat["max_items"] = max(lengths)
+
+            else:
+                field_stat["type"] = "mixed"
+
+            stats["fields"][fname] = field_stat
+
+        return stats
 
     def _init_client(self):
         """Initialize LLM client based on provider."""
@@ -340,6 +393,10 @@ class DataSynthesizer:
             result.output_path = str(output_path)
             result.duration_seconds = (datetime.now() - start_time).total_seconds()
 
+            # Compute stats
+            if final_samples:
+                result.stats = self._compute_stats(final_samples, data_schema)
+
         except Exception as e:
             result.success = False
             result.error = str(e)
@@ -452,8 +509,9 @@ class DataSynthesizer:
         input_tokens = total_tokens * 0.4
         output_tokens = total_tokens * 0.6
 
-        input_cost = (input_tokens / 1000) * self.config.input_token_cost
-        output_cost = (output_tokens / 1000) * self.config.output_token_cost
+        input_price, output_price = SynthesisConfig._get_pricing(self.config.model)
+        input_cost = (input_tokens / 1000) * input_price
+        output_cost = (output_tokens / 1000) * output_price
 
         return round(input_cost + output_cost, 4)
 

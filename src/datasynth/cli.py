@@ -72,6 +72,7 @@ def main(verbose: bool):
     help="数据类型 (auto=自动检测)",
 )
 @click.option("--resume", is_flag=True, help="增量模式: 从已有输出文件继续生成")
+@click.option("--stats", is_flag=True, help="输出生成统计报告")
 def generate(
     analysis_dir: str,
     output: Optional[str],
@@ -88,6 +89,7 @@ def generate(
     post_hook: Optional[str],
     data_type: str,
     resume: bool,
+    stats: bool,
 ):
     """从 DataRecipe 分析结果生成合成数据
 
@@ -150,6 +152,13 @@ def generate(
         click.echo(f"  预计成本: ${result.estimated_cost:.4f}")
         click.echo(f"  耗时: {result.duration_seconds:.1f}s")
 
+        # Write stats
+        if stats and result.stats:
+            stats_path = Path(result.output_path).with_suffix(".stats.json")
+            with open(stats_path, "w", encoding="utf-8") as f:
+                json.dump(result.stats, f, indent=2, ensure_ascii=False)
+            click.echo(f"  统计报告: {stats_path}")
+
         # Run post-hook
         if post_hook:
             cmd = post_hook.format(
@@ -198,6 +207,7 @@ def generate(
     help="数据类型 (auto=自动检测)",
 )
 @click.option("--resume", is_flag=True, help="增量模式: 从已有输出文件继续生成")
+@click.option("--stats", is_flag=True, help="输出生成统计报告")
 def create(
     schema_file: str,
     seeds_file: str,
@@ -213,6 +223,7 @@ def create(
     output_format: str,
     data_type: str,
     resume: bool,
+    stats: bool,
 ):
     """从 Schema 和种子数据创建合成数据
 
@@ -277,6 +288,12 @@ def create(
         click.echo(f"  生成数量: {result.generated_count}")
         if result.dedup_count:
             click.echo(f"  去重数量: {result.dedup_count}")
+
+        if stats and result.stats:
+            stats_path = Path(output).with_suffix(".stats.json")
+            with open(stats_path, "w", encoding="utf-8") as f:
+                json.dump(result.stats, f, indent=2, ensure_ascii=False)
+            click.echo(f"  统计报告: {stats_path}")
     else:
         click.echo(f"✗ 生成失败: {result.error}", err=True)
         sys.exit(1)

@@ -30,6 +30,43 @@ class TestSynthesisConfig:
         assert estimate["target_count"] == 500
         assert estimate["estimated_batches"] == 100
 
+    def test_pricing_claude_sonnet(self):
+        inp, out = SynthesisConfig._get_pricing("claude-sonnet-4-20250514")
+        assert inp == 0.003
+        assert out == 0.015
+
+    def test_pricing_claude_opus(self):
+        inp, out = SynthesisConfig._get_pricing("claude-opus-4-20250514")
+        assert inp == 0.015
+        assert out == 0.075
+
+    def test_pricing_claude_haiku(self):
+        inp, out = SynthesisConfig._get_pricing("claude-haiku-3-5")
+        assert inp == 0.00025
+        assert out == 0.00125
+
+    def test_pricing_gpt4o(self):
+        inp, out = SynthesisConfig._get_pricing("gpt-4o")
+        assert inp == 0.0025
+        assert out == 0.01
+
+    def test_pricing_gpt4o_mini(self):
+        inp, out = SynthesisConfig._get_pricing("gpt-4o-mini")
+        assert inp == 0.00015
+        assert out == 0.0006
+
+    def test_pricing_unknown_model(self):
+        """Unknown model returns default pricing."""
+        inp, out = SynthesisConfig._get_pricing("some-unknown-model")
+        assert inp == 0.003
+        assert out == 0.015
+
+    def test_estimate_cost_uses_model_pricing(self):
+        """Estimate should use model-specific pricing."""
+        sonnet = SynthesisConfig(target_count=100, model="claude-sonnet-4-20250514")
+        haiku = SynthesisConfig(target_count=100, model="claude-haiku-3-5")
+        assert haiku.estimate_cost()["estimated_cost_usd"] < sonnet.estimate_cost()["estimated_cost_usd"]
+
 
 class TestDataSchema:
     """Tests for DataSchema."""
