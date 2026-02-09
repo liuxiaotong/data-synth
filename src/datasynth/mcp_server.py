@@ -97,6 +97,21 @@ def create_server() -> "Server":
                             "enum": ["anthropic", "openai"],
                             "description": "LLM 提供商",
                         },
+                        "format": {
+                            "type": "string",
+                            "enum": ["json", "jsonl"],
+                            "description": "输出格式 (默认: json)",
+                        },
+                        "data_type": {
+                            "type": "string",
+                            "enum": ["auto", "instruction_response", "preference", "multi_turn"],
+                            "description": "数据类型 (默认: auto)",
+                        },
+                        "resume": {
+                            "type": "boolean",
+                            "description": "增量续跑 (默认: false)",
+                            "default": False,
+                        },
                     },
                     "required": ["analysis_dir"],
                 },
@@ -202,6 +217,7 @@ def create_server() -> "Server":
                 target_count=arguments.get("count", 100),
                 model=arguments.get("model", "claude-sonnet-4-20250514"),
                 provider=arguments.get("provider", "anthropic"),
+                data_type=arguments.get("data_type", "auto"),
             )
 
             synthesizer = DataSynthesizer(config)
@@ -209,6 +225,8 @@ def create_server() -> "Server":
                 analysis_dir=arguments["analysis_dir"],
                 output_path=arguments.get("output_path"),
                 target_count=arguments.get("count"),
+                output_format=arguments.get("format", "json"),
+                resume=arguments.get("resume", False),
             )
 
             if result.success:

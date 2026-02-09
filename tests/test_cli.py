@@ -55,7 +55,7 @@ class TestVersion:
     def test_version(self, runner):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert "0.2.0" in result.output
 
 
 class TestEstimate:
@@ -252,6 +252,65 @@ class TestGenerate:
 
         assert result.exit_code == 1
         assert "生成失败" in result.output
+
+    def test_generate_with_data_type(self, runner, datarecipe_dir):
+        mock_result = SynthesisResult(
+            success=True,
+            output_path="x",
+            generated_count=5,
+            failed_count=0,
+            total_tokens=1000,
+            estimated_cost=0.01,
+            duration_seconds=1.0,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            result = runner.invoke(
+                main,
+                [
+                    "generate",
+                    str(datarecipe_dir),
+                    "-n",
+                    "5",
+                    "--data-type",
+                    "preference",
+                ],
+            )
+
+        assert result.exit_code == 0
+        cfg = MockSynth.call_args[0][0]
+        assert cfg.data_type == "preference"
+
+    def test_generate_with_resume(self, runner, datarecipe_dir):
+        mock_result = SynthesisResult(
+            success=True,
+            output_path="x",
+            generated_count=10,
+            failed_count=0,
+            total_tokens=2000,
+            estimated_cost=0.02,
+            duration_seconds=2.0,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            result = runner.invoke(
+                main,
+                [
+                    "generate",
+                    str(datarecipe_dir),
+                    "-n",
+                    "10",
+                    "--resume",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert "增量续跑" in result.output
+        # Verify resume=True was passed
+        call_kwargs = MockSynth.return_value.synthesize_from_datarecipe.call_args[1]
+        assert call_kwargs["resume"] is True
 
     def test_nonexistent_dir(self, runner):
         result = runner.invoke(main, ["generate", "/nonexistent/path"])
