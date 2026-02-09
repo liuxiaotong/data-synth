@@ -55,7 +55,7 @@ class TestVersion:
     def test_version(self, runner):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.3.1" in result.output
+        assert "0.4.0" in result.output
 
 
 class TestEstimate:
@@ -647,3 +647,112 @@ class TestConfigFile:
         )
         assert result.exit_code == 0
         assert "claude-haiku-3-5" in result.output
+
+
+class TestValidate:
+    def test_validate_all_valid(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"fields": [{"name": "q", "type": "text"}, {"name": "a", "type": "text"}]}),
+            encoding="utf-8",
+        )
+        data_file = tmp_path / "data.json"
+        data_file.write_text(
+            json.dumps([{"q": "hello", "a": "world"}, {"q": "hi", "a": "there"}]),
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["validate", str(data_file), str(schema_file)])
+        assert result.exit_code == 0
+        assert "合规: 2" in result.output
+        assert "全部通过" in result.output
+
+    def test_validate_with_errors(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"fields": [
+                {"name": "score", "type": "int", "constraints": {"range": [1, 5]}},
+            ]}),
+            encoding="utf-8",
+        )
+        data_file = tmp_path / "data.json"
+        data_file.write_text(
+            json.dumps([{"score": 3}, {"score": 10}, {"score": "bad"}]),
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["validate", str(data_file), str(schema_file)])
+        assert result.exit_code == 1
+        assert "合规: 1" in result.output
+        assert "不合规: 2" in result.output
+
+    def test_validate_jsonl(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"fields": [{"name": "text", "type": "text"}]}),
+            encoding="utf-8",
+        )
+        data_file = tmp_path / "data.jsonl"
+        data_file.write_text(
+            '{"text": "hello"}\n{"text": "world"}\n',
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["validate", str(data_file), str(schema_file)])
+        assert result.exit_code == 0
+        assert "合规: 2" in result.output
+
+    def test_validate_samples_format(self, runner, tmp_path):
+        """Validate should handle {samples: [{data: ...}]} format."""
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"fields": [{"name": "q", "type": "text"}]}),
+            encoding="utf-8",
+        )
+        data_file = tmp_path / "data.json"
+        data_file.write_text(
+            json.dumps({"samples": [{"data": {"q": "hi"}}, {"data": {"q": "hello"}}]}),
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["validate", str(data_file), str(schema_file)])
+        assert result.exit_code == 0
+        assert "合规: 2" in result.output
+
+    def test_validate_empty_data(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text("{}", encoding="utf-8")
+        data_file = tmp_path / "data.json"
+        data_file.write_text("[]", encoding="utf-8")
+
+        result = runner.invoke(main, ["validate", str(data_file), str(schema_file)])
+        assert result.exit_code == 1
+        assert "数据文件为空" in result.output
+
+
+class TestInit:
+    def test_init_creates_files(self, runner, tmp_path):
+        result = runner.invoke(main, ["init", "-o", str(tmp_path / "project")])
+        assert result.exit_code == 0
+        assert (tmp_path / "project" / "datasynth.config.json").exists()
+        assert (tmp_path / "project" / "schema.json").exists()
+        assert (tmp_path / "project" / "seeds.json").exists()
+        assert "已创建" in result.output
+        assert "快速开始" in result.output
+
+    def test_init_skips_existing(self, runner, tmp_path):
+        (tmp_path / "datasynth.config.json").write_text("{}", encoding="utf-8")
+        result = runner.invoke(main, ["init", "-o", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "跳过" in result.output
+
+    def test_init_default_directory(self, runner, tmp_path):
+        import os
+        old_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            result = runner.invoke(main, ["init"])
+            assert result.exit_code == 0
+            assert (tmp_path / "schema.json").exists()
+        finally:
+            os.chdir(old_cwd)

@@ -465,6 +465,132 @@ def prepare(
 
 
 @main.command()
+@click.argument("data_file", type=click.Path(exists=True))
+@click.argument("schema_file", type=click.Path(exists=True))
+def validate(data_file: str, schema_file: str):
+    """验证数据文件是否符合 Schema
+
+    DATA_FILE: 数据文件路径 (JSON / JSONL)
+    SCHEMA_FILE: Schema JSON 文件路径
+    """
+    from datasynth.config import DataSchema
+
+    # Load schema
+    with open(schema_file, "r", encoding="utf-8") as f:
+        schema = DataSchema.from_dict(json.load(f))
+
+    # Load data
+    data_path = Path(data_file)
+    samples: list = []
+    with open(data_path, "r", encoding="utf-8") as f:
+        if data_path.suffix == ".jsonl":
+            for line in f:
+                if line.strip():
+                    samples.append(json.loads(line))
+        else:
+            data = json.load(f)
+            if isinstance(data, list):
+                samples = data
+            elif isinstance(data, dict) and "samples" in data:
+                samples = [s.get("data", s) for s in data["samples"]]
+
+    if not samples:
+        click.echo("✗ 数据文件为空", err=True)
+        sys.exit(1)
+
+    click.echo(f"验证 {len(samples)} 条数据...")
+    click.echo(f"  Schema: {schema_file}")
+    click.echo(f"  字段: {', '.join(f.name for f in schema.fields)}")
+
+    valid_count = 0
+    error_count = 0
+    all_errors: list[tuple[int, list[str]]] = []
+
+    for i, sample in enumerate(samples):
+        errs = schema.validate_sample(sample)
+        if errs:
+            error_count += 1
+            all_errors.append((i + 1, errs))
+        else:
+            valid_count += 1
+
+    click.echo(f"\n结果:")
+    click.echo(f"  ✓ 合规: {valid_count}")
+    click.echo(f"  ✗ 不合规: {error_count}")
+
+    if all_errors:
+        click.echo(f"\n错误详情 (前 10 条):")
+        for idx, errs in all_errors[:10]:
+            click.echo(f"  #{idx}: {'; '.join(errs)}")
+        if len(all_errors) > 10:
+            click.echo(f"  ... 共 {len(all_errors)} 条错误")
+        sys.exit(1)
+    else:
+        click.echo("  全部通过 ✓")
+
+
+@main.command()
+@click.option("-o", "--output", type=click.Path(), default=".", help="输出目录 (默认: 当前目录)")
+def init(output: str):
+    """初始化配置和 Schema 模板
+
+    在指定目录生成 datasynth.config.json 和 schema.json 模板。
+    """
+    out_dir = Path(output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    config_path = out_dir / "datasynth.config.json"
+    schema_path = out_dir / "schema.json"
+    seeds_path = out_dir / "seeds.json"
+
+    config_template = {
+        "target_count": 100,
+        "model": "claude-sonnet-4-20250514",
+        "provider": "anthropic",
+        "temperature": 0.8,
+        "batch_size": 5,
+        "max_retries": 3,
+        "retry_delay": 2.0,
+        "concurrency": 1,
+        "data_type": "auto",
+    }
+
+    schema_template = {
+        "project_name": "我的项目",
+        "description": "项目描述",
+        "fields": [
+            {"name": "instruction", "type": "text", "description": "用户指令"},
+            {"name": "response", "type": "text", "description": "模型回答"},
+        ],
+    }
+
+    seeds_template = [
+        {"instruction": "示例问题 1", "response": "示例回答 1"},
+        {"instruction": "示例问题 2", "response": "示例回答 2"},
+    ]
+
+    created = []
+    for path, data in [
+        (config_path, config_template),
+        (schema_path, schema_template),
+        (seeds_path, seeds_template),
+    ]:
+        if path.exists():
+            click.echo(f"  跳过 (已存在): {path}")
+        else:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            created.append(str(path))
+            click.echo(f"  ✓ 已创建: {path}")
+
+    if created:
+        click.echo(f"\n快速开始:")
+        click.echo(f"  knowlyr-datasynth create {schema_path} {seeds_path} -o output.json -n 10")
+    else:
+        click.echo("\n所有文件已存在，未创建新文件。")
+
+
+@main.command()
 @click.option("-n", "--count", type=int, default=100, help="目标数量")
 @click.option("-m", "--model", type=str, default="claude-sonnet-4-20250514", help="模型")
 def estimate(count: int, model: str):

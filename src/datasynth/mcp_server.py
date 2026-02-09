@@ -43,6 +43,11 @@ def create_server() -> "Server":
                             "description": "要生成的数据条数 (默认: 10)",
                             "default": 10,
                         },
+                        "data_type": {
+                            "type": "string",
+                            "enum": ["auto", "instruction_response", "preference", "multi_turn"],
+                            "description": "数据类型 (默认: auto)",
+                        },
                     },
                     "required": ["analysis_dir"],
                 },
@@ -167,11 +172,19 @@ def create_server() -> "Server":
                 else:
                     seed_samples.append(s)
 
+            # Load guidelines
+            guidelines = None
+            guidelines_path = analysis_dir / "03_标注规范" / "ANNOTATION_SPEC.md"
+            if guidelines_path.exists():
+                guidelines = guidelines_path.read_text(encoding="utf-8")
+
             synthesizer = InteractiveSynthesizer()
             result = synthesizer.prepare_synthesis(
                 schema=schema,
                 seed_samples=seed_samples,
                 count=count,
+                guidelines=guidelines,
+                data_type=arguments.get("data_type", "auto"),
             )
 
             return [
