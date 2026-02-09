@@ -8,9 +8,10 @@
 [![PyPI](https://img.shields.io/pypi/v/knowlyr-datasynth?color=blue)](https://pypi.org/project/knowlyr-datasynth/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml)
 [![MCP](https://img.shields.io/badge/MCP-4_Tools-purple.svg)](#mcp-server)
 
-[快速开始](#快速开始) · [交互模式](#交互模式) · [MCP Server](#mcp-server) · [Data Pipeline 生态](#data-pipeline-生态)
+[快速开始](#快速开始) · [高级功能](#高级功能) · [交互模式](#交互模式) · [MCP Server](#mcp-server) · [Data Pipeline 生态](#data-pipeline-生态)
 
 </div>
 
@@ -26,6 +27,14 @@
 Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质检筛选
 ```
 
+- **智能模板** — 自动检测数据类型 (指令-回复 / 偏好对 / 多轮对话)，选用专用 Prompt
+- **Schema 验证** — 类型检查 + 约束校验 (range / enum / length)，自动过滤不合规样本
+- **去重** — 精确匹配去重，种子 + 跨批次，避免重复数据
+- **并发生成** — 多批次并行调用 LLM，线程安全去重
+- **增量续跑** — `--resume` 从已有输出继续，断点恢复不浪费
+- **重试策略** — 自动重试 + 温度递增，提高容错和多样性
+- **后置钩子** — 生成完成后自动触发质检等下游命令
+
 ### 输入 / 输出示例 / Input & Output Samples
 
 ```jsonc
@@ -35,7 +44,7 @@ Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质
     "fields": [
       {"name": "instruction", "type": "text"},
       {"name": "response", "type": "text"},
-      {"name": "quality", "type": "int", "range": [1,5]}
+      {"name": "quality", "type": "int", "constraints": {"range": [1, 5]}}
     ]
   },
   "samples": [{"instruction": "解释 COT", "response": "Chain-of-thought...", "quality": 5}]
@@ -88,6 +97,9 @@ export ANTHROPIC_API_KEY=your_key
 # 从 DataRecipe 分析结果生成
 knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 100
 
+# 并发 + JSONL 输出
+knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 1000 --concurrency 3 --format jsonl
+
 # 估算成本
 knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 1000 --dry-run
 ```
@@ -103,6 +115,7 @@ knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 1000 --dry-run
 ✓ 生成成功: ./analysis_output/my_dataset/11_合成数据/synthetic.json
   生成数量: 100
   失败数量: 0
+  去重数量: 3
   Token 用量: 45,230
   预计成本: $0.1823
   耗时: 42.3s
@@ -120,6 +133,77 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 ```
 
 在 Claude Code 中使用更方便，见 [MCP Server](#mcp-server) 章节。
+
+---
+
+## 高级功能 / Advanced Features
+
+### 增量续跑 / Resume
+
+中断后从已有输出继续生成，不会重复已有数据：
+
+```bash
+# 首次生成 500 条（中途中断只生成了 300 条）
+knowlyr-datasynth generate ./output/my_dataset/ -n 500
+
+# 续跑，自动从第 301 条开始
+knowlyr-datasynth generate ./output/my_dataset/ -n 500 --resume
+```
+
+### 数据类型自动检测 / Auto Data Type
+
+根据 Schema 字段名自动选择最佳 Prompt 模板：
+
+| 字段特征 | 检测为 | 专用模板 |
+|---------|-------|---------|
+| `instruction` + `response` | `instruction_response` | 指令-回复生成 |
+| `prompt` + `chosen` + `rejected` | `preference` | 偏好对比数据 |
+| `conversation` | `multi_turn` | 多轮对话生成 |
+
+也可手动指定：`--data-type preference`
+
+### Schema 验证 / Validation
+
+生成的数据自动校验，不合规样本被过滤：
+
+- **类型检查**: `text` / `int` / `float` / `bool` / `list`
+- **约束检查**: `range` (数值范围)、`enum` (枚举值)、`min_length` / `max_length` (字符串长度)
+
+```jsonc
+// Schema 定义约束
+{"name": "quality", "type": "int", "constraints": {"range": [1, 5]}}
+{"name": "level", "type": "text", "constraints": {"enum": ["easy", "medium", "hard"]}}
+```
+
+使用 `--no-validate` 或 `validate=False` 跳过验证和去重。
+
+### 并发生成 / Concurrency
+
+```bash
+# 3 个批次并行，加速生成
+knowlyr-datasynth generate ./output/my_dataset/ -n 1000 --concurrency 3
+```
+
+### 失败重试策略 / Retry Strategy
+
+```bash
+knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
+```
+
+- `--max-retries`：应对 429/5xx 错误
+- `--retry-delay`：重试间隔秒数
+- `--temperature`：重试时自动递增 0.05，提高结果多样性
+
+### 后置钩子 / Post Hook
+
+生成完成后自动触发下游命令：
+
+```bash
+knowlyr-datasynth generate ./output/my_dataset/ -n 1000 \
+  --post-hook "knowlyr-datacheck validate {analysis_dir}"
+```
+
+支持变量: `{analysis_dir}` `{output_path}` `{count}`
 
 ---
 
@@ -159,8 +243,6 @@ DataSynth 批量合成
 DataCheck 质检 + 回写报告
 ```
 
-在 CLI 中可通过 `knowlyr-datasynth generate ... --post-hook "knowlyr-datacheck validate {analysis_dir}"` 自动触发后置质检。
-
 ---
 
 ## 交互模式 / Interactive Workflow
@@ -180,34 +262,6 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 ### 步骤 3: 解析结果
 
 使用 MCP 工具 `parse_synthesis_result` 解析 Claude 的回复。
-
----
-
-## Prompt 指南 / Prompt Guide
-
-### 模板 / Template
-
-```
-You are a data generation engine...
-- Field definitions: {{schema}}
-- Style guide: {{rubric}}
-- Examples ({{seed_count}}): {{seed_examples}}
-Generate {{batch_size}} samples in JSONL format.
-```
-
-- `batch_size` 建议 ≤20，过大容易触发限流或超时。
-- 根据任务敏感度添加「不得输出 PII / 不得引用真实用户」等约束，降低审查失败概率。
-- 冗长 schema 可分块粘贴 (`schema://chunk/<n>`) 以保持 Prompt < 8k tokens。
-
-### 失败重试策略 / Retry Strategy
-
-```bash
-knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
-```
-
-- `--max-retries`：应对 429/5xx。
-- `--retry-delay`：大型模型常见 2-5 秒冷却时间。
-- `--temperature`：偏低→一致性，偏高→多样性；可在重试时递增 0.05。
 
 ---
 
@@ -236,7 +290,7 @@ knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
 |------|------|
 | `prepare_synthesis` | 准备合成 Prompt（交互模式） |
 | `parse_synthesis_result` | 解析 LLM 生成结果并保存 |
-| `synthesize_data` | 直接调用 LLM 生成（需要 API key） |
+| `synthesize_data` | 直接调用 LLM 生成（支持 resume / data_type / format） |
 | `estimate_synthesis_cost` | 估算生成成本 |
 
 ### 使用示例 (交互模式) / Usage Example
@@ -298,7 +352,7 @@ knowlyr-datarecipe deep-analyze tencent/CL-bench -o ./output
 knowlyr-datalabel generate ./output/tencent_CL-bench/
 
 # 3. DataSynth: 基于种子数据批量合成
-knowlyr-datasynth generate ./output/tencent_CL-bench/ -n 1000
+knowlyr-datasynth generate ./output/tencent_CL-bench/ -n 1000 --concurrency 3
 
 # 4. DataCheck: 质量检查
 knowlyr-datacheck validate ./output/tencent_CL-bench/
@@ -337,6 +391,7 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 |------|------|
 | `knowlyr-datasynth generate <dir>` | 从 DataRecipe 分析结果生成 (API 模式) |
 | `knowlyr-datasynth generate <dir> --dry-run` | 仅估算成本 |
+| `knowlyr-datasynth generate <dir> --resume` | 增量续跑 |
 | `knowlyr-datasynth create <schema> <seeds> -o <out>` | 从自定义文件生成 |
 | `knowlyr-datasynth prepare <dir>` | 准备 Prompt (交互模式) |
 | `knowlyr-datasynth estimate -n <count>` | 估算成本 |
@@ -347,8 +402,8 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 |------|------|--------|
 | `-n, --count` | 生成数量 | 100 |
 | `-m, --model` | LLM 模型 | claude-sonnet-4-20250514 |
-| `-p, --provider` | 提供商 | anthropic |
-| `-t, --temperature` | 采样温度 | 0.8 |
+| `-p, --provider` | 提供商 (`anthropic` / `openai`) | anthropic |
+| `-t, --temperature` | 采样温度 (重试时自动递增 0.05) | 0.8 |
 | `--batch-size` | 每批数量 | 5 |
 | `--max-retries` | 失败重试次数 | 3 |
 | `--retry-delay` | 重试间隔秒数 | 2.0 |
@@ -372,15 +427,21 @@ config = SynthesisConfig(
     model="claude-sonnet-4-20250514",
     provider="anthropic",
     temperature=0.8,
+    concurrency=3,        # 并发批次
+    data_type="auto",     # 自动检测数据类型
 )
 
 # 生成
 synthesizer = DataSynthesizer(config)
 result = synthesizer.synthesize_from_datarecipe(
     analysis_dir="./output/my_dataset/",
+    output_format="jsonl",  # 输出 JSONL
+    resume=True,            # 增量续跑
 )
 
 print(f"生成数量: {result.generated_count}")
+print(f"去重数量: {result.dedup_count}")
+print(f"失败数量: {result.failed_count}")
 print(f"成本: ${result.estimated_cost:.4f}")
 ```
 
@@ -390,10 +451,12 @@ print(f"成本: ${result.estimated_cost:.4f}")
 
 ```
 src/datasynth/
-├── synthesizer.py    # 核心合成器
-├── prompts.py        # Prompt 模板和解析
-├── config.py         # 配置和 Schema
-├── cli.py            # CLI 命令行
+├── __init__.py       # 版本和公共导出
+├── __main__.py       # python -m datasynth 入口
+├── synthesizer.py    # 核心合成器 (API + 交互模式)
+├── prompts.py        # Prompt 模板 (通用 + 专用) 和解析
+├── config.py         # 配置、Schema 定义、验证
+├── cli.py            # CLI 命令行 (Click)
 └── mcp_server.py     # MCP Server (4 工具)
 ```
 
