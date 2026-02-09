@@ -435,6 +435,104 @@ class TestDataSynthesizer:
         call_args = s._call_llm.call_args[0][0]
         assert "数据质量" in call_args
 
+    def test_schema_validation_filters_invalid(self, tmp_path):
+        """Test that invalid samples are filtered out by schema validation."""
+        schema_with_int = {
+            "project_name": "测试项目",
+            "fields": [
+                {"name": "instruction", "type": "text"},
+                {"name": "response", "type": "text"},
+                {"name": "quality", "type": "int", "constraints": {"range": [1, 5]}},
+            ],
+        }
+        # One valid, one with wrong type, one out of range
+        response = json.dumps(
+            [
+                {"instruction": "Q1", "response": "A1", "quality": 4},
+                {"instruction": "Q2", "response": "A2", "quality": "high"},  # invalid type
+                {"instruction": "Q3", "response": "A3", "quality": 10},  # out of range
+            ],
+            ensure_ascii=False,
+        )
+        cfg = SynthesisConfig(target_count=3, batch_size=3, validate=True)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(response, 300))
+
+        result = s.synthesize(
+            schema=schema_with_int,
+            seed_samples=[{"instruction": "seed", "response": "ans", "quality": 3}],
+            output_path=str(tmp_path / "out.json"),
+            target_count=3,
+        )
+
+        assert result.success
+        assert result.generated_count == 1  # only the valid one
+        assert result.failed_count == 2  # two invalid
+
+    def test_schema_validation_skipped_when_disabled(self, tmp_path):
+        """Test that validation is skipped when validate=False."""
+        schema_with_int = {
+            "project_name": "测试项目",
+            "fields": [
+                {"name": "instruction", "type": "text"},
+                {"name": "quality", "type": "int", "constraints": {"range": [1, 5]}},
+            ],
+        }
+        response = json.dumps(
+            [
+                {"instruction": "Q1", "quality": 4},
+                {"instruction": "Q2", "quality": "bad"},  # would be invalid
+            ],
+            ensure_ascii=False,
+        )
+        cfg = SynthesisConfig(target_count=2, batch_size=2, validate=False)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(response, 200))
+
+        result = s.synthesize(
+            schema=schema_with_int,
+            seed_samples=[{"instruction": "seed", "quality": 3}],
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+        )
+
+        assert result.success
+        assert result.generated_count == 2  # no validation, all pass
+
+    def test_retry_temperature_increases(self, tmp_path):
+        """Test that temperature increases on retry attempts."""
+        cfg = SynthesisConfig(
+            target_count=2, batch_size=2, max_retries=3, retry_delay=0, temperature=0.8
+        )
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+
+        # First call fails, second succeeds
+        s._call_llm = MagicMock(
+            side_effect=[RuntimeError("timeout"), (LLM_RESPONSE, 500)]
+        )
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+        )
+
+        assert result.success
+        assert result.generated_count == 2
+        # First call: temperature=None (uses config default)
+        # Second call: temperature=0.85 (0.8 + 0.05)
+        first_call_temp = s._call_llm.call_args_list[0][1].get("temperature")
+        second_call_temp = s._call_llm.call_args_list[1][1].get("temperature")
+        assert first_call_temp is None  # first attempt uses default
+        assert second_call_temp == pytest.approx(0.85, abs=0.001)
+
     def test_estimate_cost(self):
         s = DataSynthesizer()
         cost = s._estimate_cost(10000)

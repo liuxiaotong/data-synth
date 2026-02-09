@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from datasynth import __version__
 from datasynth.config import DataSchema, SynthesisConfig
 from datasynth.prompts import build_synthesis_prompt, parse_generated_samples
 
@@ -151,12 +152,32 @@ class DataSynthesizer:
 
                 for attempt in range(1, self.config.max_retries + 1):
                     try:
-                        response_text, tokens = self._call_llm(prompt)
+                        # Increment temperature on retries for more diversity
+                        retry_temp = min(
+                            self.config.temperature + (attempt - 1) * 0.05, 1.0
+                        )
+                        temp = retry_temp if attempt > 1 else None
+                        response_text, tokens = self._call_llm(prompt, temperature=temp)
                         samples = parse_generated_samples(response_text, data_schema)
 
-                        # Thread-safe dedup
+                        # Validate + dedup
                         batch_deduped = 0
+                        batch_invalid = 0
                         if self.config.validate:
+                            # Schema validation
+                            valid = []
+                            for s in samples:
+                                errs = data_schema.validate_sample(s)
+                                if errs:
+                                    batch_invalid += 1
+                                    logger.debug(
+                                        "Sample rejected: %s", "; ".join(errs)
+                                    )
+                                else:
+                                    valid.append(s)
+                            samples = valid
+
+                            # Thread-safe dedup
                             unique = []
                             with lock:
                                 for s in samples:
@@ -168,7 +189,7 @@ class DataSynthesizer:
                                         batch_deduped += 1
                             samples = unique
 
-                        return samples, tokens, 0, batch_deduped
+                        return samples, tokens, batch_invalid, batch_deduped
 
                     except Exception as e:
                         logger.warning(
@@ -222,7 +243,7 @@ class DataSynthesizer:
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
                     "generator": "DataSynth",
-                    "version": "0.1.0",
+                    "version": __version__,
                     "config": {
                         "model": self.config.model,
                         "provider": self.config.provider,
@@ -335,13 +356,15 @@ class DataSynthesizer:
             output_format=output_format,
         )
 
-    def _call_llm(self, prompt: str) -> tuple[str, int]:
+    def _call_llm(self, prompt: str, temperature: float | None = None) -> tuple[str, int]:
         """Call LLM and return response text and token count."""
+        temp = temperature if temperature is not None else self.config.temperature
+
         if self._provider == "anthropic":
             response = self._client.messages.create(
                 model=self.config.model,
                 max_tokens=self.config.max_tokens_per_sample * self.config.batch_size,
-                temperature=self.config.temperature,
+                temperature=temp,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = response.content[0].text
@@ -352,7 +375,7 @@ class DataSynthesizer:
             response = self._client.chat.completions.create(
                 model=self.config.model,
                 max_tokens=self.config.max_tokens_per_sample * self.config.batch_size,
-                temperature=self.config.temperature,
+                temperature=temp,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = response.choices[0].message.content
@@ -430,7 +453,7 @@ class InteractiveSynthesizer:
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
                     "generator": "DataSynth (Interactive)",
-                    "version": "0.1.0",
+                    "version": __version__,
                     "generated_count": len(samples),
                 },
                 "schema": schema,
