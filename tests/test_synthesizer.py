@@ -533,6 +533,161 @@ class TestDataSynthesizer:
         assert first_call_temp is None  # first attempt uses default
         assert second_call_temp == pytest.approx(0.85, abs=0.001)
 
+    def test_specialized_prompt_instruction_response(self, tmp_path):
+        """Test that instruction_response schema uses specialized prompt."""
+        cfg = SynthesisConfig(target_count=2, batch_size=2, data_type="auto")
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 500))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+        )
+
+        assert result.success
+        # Should use specialized prompt (contains "指令-回复数据生成")
+        prompt_used = s._call_llm.call_args[0][0]
+        assert "指令-回复" in prompt_used
+
+    def test_specialized_prompt_falls_back_with_guidelines(self, tmp_path):
+        """When guidelines present, use generic prompt even if data_type matches."""
+        cfg = SynthesisConfig(target_count=2, batch_size=2, data_type="auto")
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 500))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+            guidelines="自定义指南",
+        )
+
+        assert result.success
+        prompt_used = s._call_llm.call_args[0][0]
+        assert "自定义指南" in prompt_used
+
+    def test_resume_continues_from_existing(self, tmp_path):
+        """Test resume loads existing and generates remaining."""
+        output_path = tmp_path / "out.json"
+        # Write 2 existing samples
+        existing = {
+            "metadata": {},
+            "schema": SAMPLE_SCHEMA,
+            "samples": [
+                {"id": "SYNTH_0001", "data": {"instruction": "已有Q1", "response": "已有A1"}, "synthetic": True},
+                {"id": "SYNTH_0002", "data": {"instruction": "已有Q2", "response": "已有A2"}, "synthetic": True},
+            ],
+        }
+        output_path.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
+
+        cfg = SynthesisConfig(target_count=4, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 300))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(output_path),
+            target_count=4,
+            resume=True,
+        )
+
+        assert result.success
+        assert result.generated_count == 4  # 2 existing + 2 new
+
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+        assert len(data["samples"]) == 4
+
+    def test_resume_already_complete(self, tmp_path):
+        """Test resume when target already met does nothing."""
+        output_path = tmp_path / "out.json"
+        existing = {
+            "metadata": {},
+            "schema": SAMPLE_SCHEMA,
+            "samples": [
+                {"id": "SYNTH_0001", "data": {"instruction": "Q1", "response": "A1"}, "synthetic": True},
+                {"id": "SYNTH_0002", "data": {"instruction": "Q2", "response": "A2"}, "synthetic": True},
+            ],
+        }
+        output_path.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
+
+        cfg = SynthesisConfig(target_count=2, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock()
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(output_path),
+            target_count=2,
+            resume=True,
+        )
+
+        assert result.success
+        assert result.generated_count == 2
+        s._call_llm.assert_not_called()  # no LLM calls needed
+
+    def test_resume_jsonl(self, tmp_path):
+        """Test resume with JSONL format."""
+        output_path = tmp_path / "out.jsonl"
+        # Write 1 existing line
+        output_path.write_text(
+            json.dumps({"instruction": "已有Q", "response": "已有A"}, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+        cfg = SynthesisConfig(target_count=3, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 200))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(output_path),
+            target_count=3,
+            output_format="jsonl",
+            resume=True,
+        )
+
+        assert result.success
+        assert result.generated_count == 3  # 1 existing + 2 new
+        lines = output_path.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 3
+
+    def test_resume_no_existing_file(self, tmp_path):
+        """Test resume when no file exists behaves like normal run."""
+        output_path = tmp_path / "out.json"
+
+        cfg = SynthesisConfig(target_count=2, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 200))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(output_path),
+            target_count=2,
+            resume=True,
+        )
+
+        assert result.success
+        assert result.generated_count == 2
+
     def test_estimate_cost(self):
         s = DataSynthesizer()
         cost = s._estimate_cost(10000)

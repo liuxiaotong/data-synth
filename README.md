@@ -354,6 +354,8 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 | `--retry-delay` | 重试间隔秒数 | 2.0 |
 | `--concurrency` | 并发批次数 | 1 |
 | `--format` | 输出格式 (`json` / `jsonl`) | json |
+| `--data-type` | 数据类型 (`auto` / `instruction_response` / `preference` / `multi_turn`) | auto |
+| `--resume` | 增量续跑：从已有输出继续生成 | — |
 | `--post-hook` | 生成后执行的命令 | — |
 | `--dry-run` | 仅估算成本，不生成 | — |
 

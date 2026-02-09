@@ -59,6 +59,13 @@ def main():
     default=None,
     help="生成成功后执行的命令，支持 {analysis_dir} {output_path} {count} 变量",
 )
+@click.option(
+    "--data-type",
+    type=click.Choice(["auto", "instruction_response", "preference", "multi_turn"]),
+    default="auto",
+    help="数据类型 (auto=自动检测)",
+)
+@click.option("--resume", is_flag=True, help="增量模式: 从已有输出文件继续生成")
 def generate(
     analysis_dir: str,
     output: Optional[str],
@@ -73,6 +80,8 @@ def generate(
     output_format: str,
     dry_run: bool,
     post_hook: Optional[str],
+    data_type: str,
+    resume: bool,
 ):
     """从 DataRecipe 分析结果生成合成数据
 
@@ -87,6 +96,7 @@ def generate(
         max_retries=max_retries,
         retry_delay=retry_delay,
         concurrency=concurrency,
+        data_type=data_type,
     )
 
     if dry_run:
@@ -105,6 +115,8 @@ def generate(
     click.echo(f"正在从 {analysis_dir} 生成合成数据...")
     click.echo(f"  目标数量: {count}")
     click.echo(f"  模型: {model}")
+    if resume:
+        click.echo("  模式: 增量续跑 (--resume)")
 
     def on_progress(current, total):
         click.echo(f"  进度: {current}/{total}", nl=False)
@@ -117,6 +129,7 @@ def generate(
         target_count=count,
         on_progress=on_progress,
         output_format=output_format,
+        resume=resume,
     )
 
     click.echo("")  # New line after progress
@@ -172,6 +185,12 @@ def generate(
     default="json",
     help="输出格式 (默认: json)",
 )
+@click.option(
+    "--data-type",
+    type=click.Choice(["auto", "instruction_response", "preference", "multi_turn"]),
+    default="auto",
+    help="数据类型 (auto=自动检测)",
+)
 def create(
     schema_file: str,
     seeds_file: str,
@@ -185,6 +204,7 @@ def create(
     retry_delay: float,
     concurrency: int,
     output_format: str,
+    data_type: str,
 ):
     """从 Schema 和种子数据创建合成数据
 
@@ -231,6 +251,7 @@ def create(
         max_retries=max_retries,
         retry_delay=retry_delay,
         concurrency=concurrency,
+        data_type=data_type,
     )
 
     synthesizer = DataSynthesizer(config)

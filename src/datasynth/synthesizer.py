@@ -13,7 +13,11 @@ from typing import Any, Callable, Dict, List, Optional
 
 from datasynth import __version__
 from datasynth.config import DataSchema, SynthesisConfig
-from datasynth.prompts import build_synthesis_prompt, parse_generated_samples
+from datasynth.prompts import (
+    build_synthesis_prompt,
+    get_specialized_prompt,
+    parse_generated_samples,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,24 @@ class DataSynthesizer:
         else:
             raise ValueError(f"不支持的 provider: {provider}")
 
+    @staticmethod
+    def _load_existing_samples(output_path: str) -> list[Dict[str, Any]]:
+        """Load existing samples from an output file (for resume mode)."""
+        path = Path(output_path)
+        if not path.exists():
+            return []
+
+        with open(path, "r", encoding="utf-8") as f:
+            if path.suffix == ".jsonl":
+                return [json.loads(line) for line in f if line.strip()]
+            else:
+                data = json.load(f)
+                if isinstance(data, dict) and "samples" in data:
+                    return [s.get("data", s) for s in data["samples"]]
+                if isinstance(data, list):
+                    return data
+        return []
+
     def synthesize(
         self,
         schema: Dict[str, Any],
@@ -90,6 +112,7 @@ class DataSynthesizer:
         guidelines: Optional[str] = None,
         on_progress: Optional[Callable[[int, int], None]] = None,
         output_format: str = "json",
+        resume: bool = False,
     ) -> SynthesisResult:
         """Synthesize data based on schema and seed examples.
 
@@ -100,6 +123,7 @@ class DataSynthesizer:
             target_count: Number of samples to generate (overrides config)
             guidelines: Additional generation guidelines
             on_progress: Callback for progress updates (current, total)
+            resume: If True, load existing output and continue from where left off
 
         Returns:
             SynthesisResult with generation status
@@ -123,6 +147,24 @@ class DataSynthesizer:
                     seen.add(self._fingerprint(seed))
             lock = threading.Lock()
 
+            # Resume: load existing samples
+            existing_samples: list[Dict[str, Any]] = []
+            if resume:
+                existing_samples = self._load_existing_samples(output_path)
+                if existing_samples:
+                    logger.info("Resume: loaded %d existing samples", len(existing_samples))
+                    # Add existing to dedup index
+                    if self.config.validate:
+                        for s in existing_samples:
+                            seen.add(self._fingerprint(s))
+                    # Reduce remaining target
+                    count = max(0, count - len(existing_samples))
+                    if count == 0:
+                        result.generated_count = len(existing_samples)
+                        result.output_path = str(output_path)
+                        result.duration_seconds = (datetime.now() - start_time).total_seconds()
+                        return result
+
             # Shared mutable state
             all_samples: list[Dict[str, Any]] = []
             failed = 0
@@ -136,19 +178,33 @@ class DataSynthesizer:
                 remaining = count - i * self.config.batch_size
                 batch_counts.append(min(self.config.batch_size, remaining))
 
+            # Resolve data_type
+            data_type = self.config.data_type
+            if data_type == "auto":
+                data_type = data_schema.detect_data_type()
+
             def run_batch(batch_idx: int, batch_count: int) -> tuple:
                 """Run a single batch. Returns (samples, tokens, failed, deduped)."""
                 selected_seeds = random.sample(
                     seed_samples, min(self.config.seed_sample_count, len(seed_samples))
                 )
 
-                prompt = build_synthesis_prompt(
-                    schema=data_schema,
-                    seed_samples=selected_seeds,
-                    count=batch_count,
-                    guidelines=guidelines,
-                    diversity_factor=self.config.diversity_factor,
-                )
+                # Use specialized prompt when available and no custom guidelines
+                if data_type and not guidelines:
+                    prompt = get_specialized_prompt(
+                        data_type=data_type,
+                        schema=data_schema,
+                        seed_samples=selected_seeds,
+                        count=batch_count,
+                    )
+                else:
+                    prompt = build_synthesis_prompt(
+                        schema=data_schema,
+                        seed_samples=selected_seeds,
+                        count=batch_count,
+                        guidelines=guidelines,
+                        diversity_factor=self.config.diversity_factor,
+                    )
 
                 for attempt in range(1, self.config.max_retries + 1):
                     try:
@@ -232,7 +288,10 @@ class DataSynthesizer:
                         if on_progress:
                             on_progress(len(all_samples), count)
 
-            result.generated_count = len(all_samples)
+            # Merge with existing samples for resume mode
+            final_samples = existing_samples + all_samples
+
+            result.generated_count = len(final_samples)
             result.failed_count = failed
             result.dedup_count = deduped
             result.total_tokens = total_tokens
@@ -251,7 +310,7 @@ class DataSynthesizer:
                         "diversity_factor": self.config.diversity_factor,
                     },
                     "seed_count": len(seed_samples),
-                    "generated_count": len(all_samples),
+                    "generated_count": len(final_samples),
                     "total_tokens": total_tokens,
                     "estimated_cost_usd": result.estimated_cost,
                 },
@@ -262,7 +321,7 @@ class DataSynthesizer:
                         "data": sample,
                         "synthetic": True,
                     }
-                    for i, sample in enumerate(all_samples)
+                    for i, sample in enumerate(final_samples)
                 ],
             }
 
@@ -272,7 +331,7 @@ class DataSynthesizer:
 
             if output_format == "jsonl":
                 with open(output_path, "w", encoding="utf-8") as f:
-                    for sample in all_samples:
+                    for sample in final_samples:
                         f.write(json.dumps(sample, ensure_ascii=False) + "\n")
             else:
                 with open(output_path, "w", encoding="utf-8") as f:
@@ -294,6 +353,7 @@ class DataSynthesizer:
         target_count: Optional[int] = None,
         on_progress: Optional[Callable[[int, int], None]] = None,
         output_format: str = "json",
+        resume: bool = False,
     ) -> SynthesisResult:
         """Synthesize from DataRecipe analysis output.
 
@@ -354,6 +414,7 @@ class DataSynthesizer:
             guidelines=guidelines,
             on_progress=on_progress,
             output_format=output_format,
+            resume=resume,
         )
 
     def _call_llm(self, prompt: str, temperature: float | None = None) -> tuple[str, int]:

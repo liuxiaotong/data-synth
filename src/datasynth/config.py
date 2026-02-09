@@ -31,6 +31,7 @@ class SynthesisConfig:
     concurrency: int = 1  # parallel batch workers
     validate: bool = True
     seed_sample_count: int = 3
+    data_type: str = "auto"  # auto, instruction_response, preference, multi_turn
 
     # Cost tracking
     input_token_cost: float = 0.003  # per 1K tokens
@@ -112,6 +113,17 @@ class DataSchema:
             scoring_rubric=data.get("scoring_rubric", []),
             constraints=data.get("constraints", {}),
         )
+
+    def detect_data_type(self) -> str | None:
+        """Auto-detect data type from field names. Returns None if unknown."""
+        names = {f.name.lower() for f in self.fields}
+        if {"prompt", "chosen", "rejected"} <= names:
+            return "preference"
+        if "conversation" in names:
+            return "multi_turn"
+        if {"instruction", "response"} <= names or {"input", "output"} <= names:
+            return "instruction_response"
+        return None
 
     def validate_sample(self, sample: Dict[str, Any]) -> list[str]:
         """Validate a sample against the schema. Returns list of error messages (empty = valid)."""

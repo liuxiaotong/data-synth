@@ -104,6 +104,48 @@ class TestSchemaField:
         assert field.constraints["max_length"] == 1000
 
 
+class TestDetectDataType:
+    """Tests for DataSchema.detect_data_type."""
+
+    def _schema(self, fields):
+        return DataSchema.from_dict({"project_name": "test", "fields": fields})
+
+    def test_instruction_response(self):
+        schema = self._schema([
+            {"name": "instruction", "type": "text"},
+            {"name": "response", "type": "text"},
+        ])
+        assert schema.detect_data_type() == "instruction_response"
+
+    def test_input_output(self):
+        schema = self._schema([
+            {"name": "input", "type": "text"},
+            {"name": "output", "type": "text"},
+        ])
+        assert schema.detect_data_type() == "instruction_response"
+
+    def test_preference(self):
+        schema = self._schema([
+            {"name": "prompt", "type": "text"},
+            {"name": "chosen", "type": "text"},
+            {"name": "rejected", "type": "text"},
+        ])
+        assert schema.detect_data_type() == "preference"
+
+    def test_multi_turn(self):
+        schema = self._schema([
+            {"name": "conversation", "type": "list"},
+        ])
+        assert schema.detect_data_type() == "multi_turn"
+
+    def test_unknown(self):
+        schema = self._schema([
+            {"name": "foo", "type": "text"},
+            {"name": "bar", "type": "int"},
+        ])
+        assert schema.detect_data_type() is None
+
+
 class TestSchemaValidation:
     """Tests for DataSchema.validate_sample."""
 

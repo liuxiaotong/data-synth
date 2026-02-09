@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "knowlyr-datasynth"
-version = "0.1.0"
+version = "0.2.0"
 description = "Data synthesis toolkit - batch generate high-quality training data from seed examples using LLMs"
 readme = "README.md"
 license = "MIT"
