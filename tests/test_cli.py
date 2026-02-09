@@ -55,7 +55,7 @@ class TestVersion:
     def test_version(self, runner):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.4.0" in result.output
+        assert "0.4.1" in result.output
 
 
 class TestEstimate:
@@ -756,3 +756,88 @@ class TestInit:
             assert (tmp_path / "schema.json").exists()
         finally:
             os.chdir(old_cwd)
+
+
+class TestConvert:
+    def test_json_to_jsonl(self, runner, tmp_path):
+        input_file = tmp_path / "data.json"
+        input_file.write_text(
+            json.dumps([{"q": "a"}, {"q": "b"}]),
+            encoding="utf-8",
+        )
+        output_file = tmp_path / "data.jsonl"
+        result = runner.invoke(main, ["convert", str(input_file), "-o", str(output_file)])
+        assert result.exit_code == 0
+        assert "转换完成" in result.output
+        assert "数据条数: 2" in result.output
+        lines = output_file.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 2
+
+    def test_jsonl_to_json(self, runner, tmp_path):
+        input_file = tmp_path / "data.jsonl"
+        input_file.write_text('{"q":"a"}\n{"q":"b"}\n', encoding="utf-8")
+        output_file = tmp_path / "data.json"
+        result = runner.invoke(main, ["convert", str(input_file), "-o", str(output_file)])
+        assert result.exit_code == 0
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+        assert len(data) == 2
+
+    def test_convert_samples_format(self, runner, tmp_path):
+        """Convert should handle {samples: [{data: ...}]} format."""
+        input_file = tmp_path / "data.json"
+        input_file.write_text(
+            json.dumps({"samples": [{"data": {"q": "hi"}}, {"data": {"q": "bye"}}]}),
+            encoding="utf-8",
+        )
+        output_file = tmp_path / "data.jsonl"
+        result = runner.invoke(main, ["convert", str(input_file), "-o", str(output_file)])
+        assert result.exit_code == 0
+        assert "数据条数: 2" in result.output
+
+    def test_convert_empty(self, runner, tmp_path):
+        input_file = tmp_path / "data.json"
+        input_file.write_text("[]", encoding="utf-8")
+        output_file = tmp_path / "data.jsonl"
+        result = runner.invoke(main, ["convert", str(input_file), "-o", str(output_file)])
+        assert result.exit_code == 1
+        assert "输入文件为空" in result.output
+
+
+class TestNoValidate:
+    def test_generate_no_validate(self, runner, datarecipe_dir):
+        mock_result = SynthesisResult(
+            success=True, output_path="x", generated_count=5,
+            failed_count=0, total_tokens=100, estimated_cost=0.01, duration_seconds=0.5,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            result = runner.invoke(
+                main, ["generate", str(datarecipe_dir), "-n", "5", "--no-validate"]
+            )
+
+        assert result.exit_code == 0
+        cfg = MockSynth.call_args[0][0]
+        assert cfg.validate is False
+
+    def test_create_no_validate(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"project_name": "T", "fields": [{"name": "text", "type": "text"}]}),
+            encoding="utf-8",
+        )
+        seeds_file = tmp_path / "seeds.json"
+        seeds_file.write_text(json.dumps([{"text": "hello"}]), encoding="utf-8")
+
+        mock_result = SynthesisResult(success=True, output_path="x", generated_count=5)
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize.return_value = mock_result
+            result = runner.invoke(
+                main,
+                ["create", str(schema_file), str(seeds_file), "-o", str(tmp_path / "o.json"), "--no-validate"],
+            )
+
+        assert result.exit_code == 0
+        cfg = MockSynth.call_args[0][0]
+        assert cfg.validate is False

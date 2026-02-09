@@ -88,6 +88,7 @@ def main(verbose: bool):
 @click.option("--resume", is_flag=True, help="增量模式: 从已有输出文件继续生成")
 @click.option("--stats", is_flag=True, help="输出生成统计报告")
 @click.option("--config", "config_file", type=click.Path(exists=True), help="配置文件 (JSON)")
+@click.option("--no-validate", is_flag=True, help="跳过 Schema 验证和去重")
 def generate(
     analysis_dir: str,
     output: Optional[str],
@@ -106,6 +107,7 @@ def generate(
     resume: bool,
     stats: bool,
     config_file: Optional[str],
+    no_validate: bool,
 ):
     """从 DataRecipe 分析结果生成合成数据
 
@@ -133,6 +135,7 @@ def generate(
         retry_delay=_pick("retry_delay", retry_delay),
         concurrency=_pick("concurrency", concurrency),
         data_type=_pick("data_type", data_type),
+        validate=not no_validate,
     )
 
     if dry_run:
@@ -260,6 +263,7 @@ def generate(
     help="生成成功后执行的命令，支持 {output_path} {count} 变量",
 )
 @click.option("--config", "config_file", type=click.Path(exists=True), help="配置文件 (JSON)")
+@click.option("--no-validate", is_flag=True, help="跳过 Schema 验证和去重")
 def create(
     schema_file: str,
     seeds_file: str,
@@ -279,6 +283,7 @@ def create(
     dry_run: bool,
     post_hook: Optional[str],
     config_file: Optional[str],
+    no_validate: bool,
 ):
     """从 Schema 和种子数据创建合成数据
 
@@ -332,6 +337,7 @@ def create(
         retry_delay=_pick("retry_delay", retry_delay),
         concurrency=_pick("concurrency", concurrency),
         data_type=_pick("data_type", data_type),
+        validate=not no_validate,
     )
 
     if dry_run:
@@ -588,6 +594,52 @@ def init(output: str):
         click.echo(f"  knowlyr-datasynth create {schema_path} {seeds_path} -o output.json -n 10")
     else:
         click.echo("\n所有文件已存在，未创建新文件。")
+
+
+@main.command()
+@click.argument("input_file", type=click.Path(exists=True))
+@click.option("-o", "--output", type=click.Path(), required=True, help="输出文件路径")
+def convert(input_file: str, output: str):
+    """转换数据格式 (JSON ↔ JSONL)
+
+    根据输出文件扩展名自动选择格式。
+    支持输入格式: JSON (list 或 {samples: [...]})、JSONL。
+
+    INPUT_FILE: 输入数据文件路径
+    """
+    input_path = Path(input_file)
+    output_path = Path(output)
+
+    # Load input
+    samples: list = []
+    with open(input_path, "r", encoding="utf-8") as f:
+        if input_path.suffix == ".jsonl":
+            for line in f:
+                if line.strip():
+                    samples.append(json.loads(line))
+        else:
+            data = json.load(f)
+            if isinstance(data, list):
+                samples = data
+            elif isinstance(data, dict) and "samples" in data:
+                samples = [s.get("data", s) for s in data["samples"]]
+
+    if not samples:
+        click.echo("✗ 输入文件为空", err=True)
+        sys.exit(1)
+
+    # Write output
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.suffix == ".jsonl":
+        with open(output_path, "w", encoding="utf-8") as f:
+            for sample in samples:
+                f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+    else:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(samples, f, indent=2, ensure_ascii=False)
+
+    click.echo(f"✓ 转换完成: {input_path} → {output_path}")
+    click.echo(f"  数据条数: {len(samples)}")
 
 
 @main.command()

@@ -82,6 +82,7 @@ class TestListTools:
             "prepare_synthesis",
             "parse_synthesis_result",
             "synthesize_data",
+            "validate_data",
             "estimate_synthesis_cost",
         }
 
@@ -231,6 +232,70 @@ class TestSynthesizeData:
             )
 
         assert "合成失败" in content[0].text
+
+
+class TestValidateData:
+    @pytest.mark.asyncio
+    async def test_validate_all_valid(self, server, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"fields": [{"name": "q", "type": "text"}]}),
+            encoding="utf-8",
+        )
+        data_file = tmp_path / "data.json"
+        data_file.write_text(
+            json.dumps([{"q": "hello"}, {"q": "world"}]),
+            encoding="utf-8",
+        )
+
+        content = await _call_tool(
+            server, "validate_data",
+            {"data_path": str(data_file), "schema_path": str(schema_file)},
+        )
+        text = content[0].text
+        assert "合规: 2" in text
+        assert "不合规: 0" in text
+
+    @pytest.mark.asyncio
+    async def test_validate_with_errors(self, server, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"fields": [{"name": "score", "type": "int", "constraints": {"range": [1, 5]}}]}),
+            encoding="utf-8",
+        )
+        data_file = tmp_path / "data.json"
+        data_file.write_text(
+            json.dumps([{"score": 3}, {"score": 99}]),
+            encoding="utf-8",
+        )
+
+        content = await _call_tool(
+            server, "validate_data",
+            {"data_path": str(data_file), "schema_path": str(schema_file)},
+        )
+        text = content[0].text
+        assert "合规: 1" in text
+        assert "不合规: 1" in text
+        assert "out of range" in text
+
+    @pytest.mark.asyncio
+    async def test_validate_missing_file(self, server):
+        content = await _call_tool(
+            server, "validate_data",
+            {"data_path": "/nonexistent", "schema_path": "/nonexistent"},
+        )
+        assert "未找到" in content[0].text
+
+
+class TestPrepareSynthesisDataType:
+    @pytest.mark.asyncio
+    async def test_prepare_with_data_type(self, server, datarecipe_dir):
+        content = await _call_tool(
+            server, "prepare_synthesis",
+            {"analysis_dir": str(datarecipe_dir), "count": 3, "data_type": "preference"},
+        )
+        text = content[0].text
+        assert "偏好对比" in text
 
 
 class TestUnknownTool:

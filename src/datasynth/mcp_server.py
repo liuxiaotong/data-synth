@@ -122,6 +122,24 @@ def create_server() -> "Server":
                 },
             ),
             Tool(
+                name="validate_data",
+                description="验证数据文件是否符合 Schema",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "data_path": {
+                            "type": "string",
+                            "description": "数据文件路径 (JSON / JSONL)",
+                        },
+                        "schema_path": {
+                            "type": "string",
+                            "description": "Schema 文件路径",
+                        },
+                    },
+                    "required": ["data_path", "schema_path"],
+                },
+            ),
+            Tool(
                 name="estimate_synthesis_cost",
                 description="估算合成成本",
                 inputSchema={
@@ -274,6 +292,59 @@ def create_server() -> "Server":
                 return [TextContent(type="text", text="\n".join(lines))]
             else:
                 return [TextContent(type="text", text=f"合成失败: {result.error}")]
+
+        elif name == "validate_data":
+            from datasynth.config import DataSchema
+
+            data_path = Path(arguments["data_path"])
+            schema_path = Path(arguments["schema_path"])
+
+            if not schema_path.exists():
+                return [TextContent(type="text", text=f"Schema 未找到: {schema_path}")]
+            if not data_path.exists():
+                return [TextContent(type="text", text=f"数据文件未找到: {data_path}")]
+
+            with open(schema_path, "r", encoding="utf-8") as f:
+                schema = DataSchema.from_dict(json.load(f))
+
+            samples: list = []
+            with open(data_path, "r", encoding="utf-8") as f:
+                if data_path.suffix == ".jsonl":
+                    for line in f:
+                        if line.strip():
+                            samples.append(json.loads(line))
+                else:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        samples = data
+                    elif isinstance(data, dict) and "samples" in data:
+                        samples = [s.get("data", s) for s in data["samples"]]
+
+            if not samples:
+                return [TextContent(type="text", text="数据文件为空")]
+
+            valid = 0
+            errors: list[tuple[int, list[str]]] = []
+            for i, sample in enumerate(samples):
+                errs = schema.validate_sample(sample)
+                if errs:
+                    errors.append((i + 1, errs))
+                else:
+                    valid += 1
+
+            lines = [
+                f"验证结果: {len(samples)} 条数据",
+                f"- ✓ 合规: {valid}",
+                f"- ✗ 不合规: {len(errors)}",
+            ]
+            if errors:
+                lines.append("\n错误详情 (前 5 条):")
+                for idx, errs in errors[:5]:
+                    lines.append(f"  #{idx}: {'; '.join(errs)}")
+                if len(errors) > 5:
+                    lines.append(f"  ... 共 {len(errors)} 条错误")
+
+            return [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "estimate_synthesis_cost":
             config = SynthesisConfig(

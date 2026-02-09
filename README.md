@@ -9,7 +9,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![CI](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml)
-[![MCP](https://img.shields.io/badge/MCP-4_Tools-purple.svg)](#mcp-server)
+[![MCP](https://img.shields.io/badge/MCP-5_Tools-purple.svg)](#mcp-server)
 
 [快速开始](#快速开始) · [高级功能](#高级功能) · [交互模式](#交互模式) · [MCP Server](#mcp-server) · [验证与初始化](#验证与初始化) · [生态](#data-pipeline-生态)
 
@@ -310,6 +310,20 @@ knowlyr-datasynth init -o my_project/
 - `schema.json` — 数据 Schema
 - `seeds.json` — 种子数据示例
 
+### 格式转换 / Convert
+
+JSON 和 JSONL 互转：
+
+```bash
+# JSON → JSONL
+knowlyr-datasynth convert data.json -o data.jsonl
+
+# JSONL → JSON
+knowlyr-datasynth convert data.jsonl -o data.json
+```
+
+支持 `{samples: [{data: ...}]}` 格式自动展开。
+
 ---
 
 ## 成本估算 / Costing
@@ -396,6 +410,7 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 | `prepare_synthesis` | 准备合成 Prompt（交互模式，支持 data_type） |
 | `parse_synthesis_result` | 解析 LLM 生成结果并保存 |
 | `synthesize_data` | 直接调用 LLM 生成（支持 resume / data_type / format） |
+| `validate_data` | 验证数据文件是否符合 Schema |
 | `estimate_synthesis_cost` | 估算生成成本 |
 
 ### 使用示例 (交互模式) / Usage Example
@@ -504,6 +519,7 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 | `knowlyr-datasynth prepare <dir> --data-type preference` | 指定数据类型 |
 | `knowlyr-datasynth validate <data> <schema>` | 验证数据合规性 |
 | `knowlyr-datasynth init` | 生成配置和 Schema 模板 |
+| `knowlyr-datasynth convert <input> -o <output>` | 转换格式 (JSON ↔ JSONL) |
 | `knowlyr-datasynth estimate -n <count>` | 估算成本 |
 
 ### 生成选项
@@ -523,6 +539,7 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 | `--resume` | 增量续跑：从已有输出继续生成 | — |
 | `--stats` | 输出字段分布统计 JSON | — |
 | `--post-hook` | 生成后执行的命令 | — |
+| `--no-validate` | 跳过 Schema 验证和去重 | — |
 | `--config` | JSON 配置文件 (CLI 参数优先) | — |
 | `--dry-run` | 仅估算成本，不生成 (显示 Schema 信息) | — |
 
@@ -574,7 +591,7 @@ src/datasynth/
 ├── prompts.py        # Prompt 模板 (通用 + 专用) 和解析
 ├── config.py         # 配置、Schema 定义、验证
 ├── cli.py            # CLI 命令行 (Click)
-└── mcp_server.py     # MCP Server (4 工具)
+└── mcp_server.py     # MCP Server (5 工具)
 ```
 
 ---
