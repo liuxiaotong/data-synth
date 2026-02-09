@@ -27,6 +27,7 @@ class SynthesisConfig:
     diversity_factor: float = 0.5
     batch_size: int = 5
     max_retries: int = 3
+    retry_delay: float = 2.0  # seconds between retries
     validate: bool = True
     seed_sample_count: int = 3
 

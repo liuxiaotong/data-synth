@@ -1,7 +1,9 @@
 """Core data synthesizer."""
 
 import json
+import logging
 import random
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +11,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from datasynth.config import DataSchema, SynthesisConfig
 from datasynth.prompts import build_synthesis_prompt, parse_generated_samples
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -76,6 +80,7 @@ class DataSynthesizer:
         target_count: Optional[int] = None,
         guidelines: Optional[str] = None,
         on_progress: Optional[Callable[[int, int], None]] = None,
+        output_format: str = "json",
     ) -> SynthesisResult:
         """Synthesize data based on schema and seed examples.
 
@@ -129,18 +134,32 @@ class DataSynthesizer:
                     diversity_factor=self.config.diversity_factor,
                 )
 
-                # Generate
-                try:
-                    response_text, tokens = self._call_llm(prompt)
-                    total_tokens += tokens
+                # Generate with retries
+                batch_success = False
+                for attempt in range(1, self.config.max_retries + 1):
+                    try:
+                        response_text, tokens = self._call_llm(prompt)
+                        total_tokens += tokens
 
-                    # Parse response
-                    samples = parse_generated_samples(response_text, data_schema)
-                    all_samples.extend(samples)
+                        # Parse response
+                        samples = parse_generated_samples(response_text, data_schema)
+                        all_samples.extend(samples)
+                        batch_success = True
+                        break
 
-                except Exception:
+                    except Exception as e:
+                        logger.warning(
+                            "Batch %d attempt %d/%d failed: %s",
+                            batch_idx + 1,
+                            attempt,
+                            self.config.max_retries,
+                            e,
+                        )
+                        if attempt < self.config.max_retries:
+                            time.sleep(self.config.retry_delay)
+
+                if not batch_success:
                     failed += batch_count
-                    # Continue with next batch
 
                 # Progress callback
                 if on_progress:
@@ -182,8 +201,14 @@ class DataSynthesizer:
             # Write output
             output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(output_data, f, indent=2, ensure_ascii=False)
+
+            if output_format == "jsonl":
+                with open(output_path, "w", encoding="utf-8") as f:
+                    for sample in all_samples:
+                        f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+            else:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    json.dump(output_data, f, indent=2, ensure_ascii=False)
 
             result.output_path = str(output_path)
             result.duration_seconds = (datetime.now() - start_time).total_seconds()
@@ -200,6 +225,7 @@ class DataSynthesizer:
         output_path: Optional[str] = None,
         target_count: Optional[int] = None,
         on_progress: Optional[Callable[[int, int], None]] = None,
+        output_format: str = "json",
     ) -> SynthesisResult:
         """Synthesize from DataRecipe analysis output.
 
@@ -249,7 +275,8 @@ class DataSynthesizer:
         if output_path is None:
             output_dir = analysis_dir / "11_合成数据"
             output_dir.mkdir(exist_ok=True)
-            output_path = output_dir / "synthetic.json"
+            ext = "jsonl" if output_format == "jsonl" else "json"
+            output_path = output_dir / f"synthetic.{ext}"
 
         return self.synthesize(
             schema=schema,
@@ -258,6 +285,7 @@ class DataSynthesizer:
             target_count=target_count,
             guidelines=guidelines,
             on_progress=on_progress,
+            output_format=output_format,
         )
 
     def _call_llm(self, prompt: str) -> tuple[str, int]:

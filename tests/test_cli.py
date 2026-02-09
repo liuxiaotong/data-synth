@@ -92,6 +92,41 @@ class TestGenerate:
         assert result.exit_code == 0
         assert "目标数量: 200" in result.output
 
+    def test_generate_with_retry_options(self, runner, datarecipe_dir):
+        mock_result = SynthesisResult(
+            success=True,
+            output_path="x",
+            generated_count=5,
+            failed_count=0,
+            total_tokens=1000,
+            estimated_cost=0.01,
+            duration_seconds=1.0,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            result = runner.invoke(
+                main,
+                [
+                    "generate",
+                    str(datarecipe_dir),
+                    "-n",
+                    "5",
+                    "--max-retries",
+                    "5",
+                    "--retry-delay",
+                    "0.5",
+                ],
+            )
+
+        assert result.exit_code == 0
+        # Verify config was created with retry options
+        cfg = MockSynth.call_args[0][0] if MockSynth.call_args[0] else MockSynth.call_args[1].get("config")
+        if cfg is None:
+            cfg = MockSynth.call_args[0][0]
+        assert cfg.max_retries == 5
+        assert cfg.retry_delay == 0.5
+
     def test_generate_success(self, runner, datarecipe_dir):
         mock_result = SynthesisResult(
             success=True,

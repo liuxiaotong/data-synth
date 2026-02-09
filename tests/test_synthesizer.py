@@ -95,6 +95,34 @@ class TestDataSynthesizer:
         assert data["samples"][0]["id"] == "SYNTH_0001"
         assert data["samples"][0]["synthetic"] is True
 
+    def test_synthesize_jsonl_output(self, tmp_path):
+        """Test JSONL output format."""
+        cfg = SynthesisConfig(target_count=2, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 500))
+
+        output_path = tmp_path / "output.jsonl"
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(output_path),
+            target_count=2,
+            output_format="jsonl",
+        )
+
+        assert result.success
+        assert result.generated_count == 2
+
+        lines = output_path.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 2
+
+        for line in lines:
+            obj = json.loads(line)
+            assert "instruction" in obj
+            assert "response" in obj
+
     def test_synthesize_with_progress(self, tmp_path):
         """Test progress callback is invoked."""
         cfg = SynthesisConfig(target_count=2, batch_size=2)
@@ -115,9 +143,9 @@ class TestDataSynthesizer:
         assert result.success
         assert len(progress_calls) >= 1
 
-    def test_synthesize_llm_failure(self, tmp_path):
-        """Test that LLM errors are handled gracefully per batch."""
-        cfg = SynthesisConfig(target_count=2, batch_size=2)
+    def test_synthesize_llm_failure_exhausts_retries(self, tmp_path):
+        """Test that LLM errors retry max_retries times then fail the batch."""
+        cfg = SynthesisConfig(target_count=2, batch_size=2, max_retries=3, retry_delay=0)
         s = DataSynthesizer(cfg)
         s._client = MagicMock()
         s._provider = "anthropic"
@@ -130,9 +158,34 @@ class TestDataSynthesizer:
             target_count=2,
         )
 
+        assert s._call_llm.call_count == 3  # retried 3 times
+
         assert result.success  # overall still succeeds, just with 0 generated
         assert result.generated_count == 0
         assert result.failed_count == 2
+
+    def test_synthesize_retry_succeeds(self, tmp_path):
+        """Test that a batch succeeds after transient failure."""
+        cfg = SynthesisConfig(target_count=2, batch_size=2, max_retries=3, retry_delay=0)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        # Fail first, succeed second
+        s._call_llm = MagicMock(
+            side_effect=[RuntimeError("timeout"), (LLM_RESPONSE, 500)]
+        )
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+        )
+
+        assert result.success
+        assert result.generated_count == 2
+        assert result.failed_count == 0
+        assert s._call_llm.call_count == 2
 
     def test_synthesize_from_datarecipe(self, tmp_path):
         """Test synthesize_from_datarecipe reads correct files."""
@@ -165,6 +218,39 @@ class TestDataSynthesizer:
         assert result.generated_count == 2
         output = tmp_path / "11_合成数据" / "synthetic.json"
         assert output.exists()
+
+    def test_synthesize_from_datarecipe_jsonl(self, tmp_path):
+        """Test synthesize_from_datarecipe with JSONL defaults to .jsonl extension."""
+        schema_dir = tmp_path / "04_复刻指南"
+        schema_dir.mkdir()
+        (schema_dir / "DATA_SCHEMA.json").write_text(
+            json.dumps(SAMPLE_SCHEMA, ensure_ascii=False), encoding="utf-8"
+        )
+
+        samples_dir = tmp_path / "09_样例数据"
+        samples_dir.mkdir()
+        (samples_dir / "samples.json").write_text(
+            json.dumps({"samples": [{"data": s} for s in SAMPLE_SEEDS]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        cfg = SynthesisConfig(target_count=2, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 200))
+
+        result = s.synthesize_from_datarecipe(
+            analysis_dir=str(tmp_path),
+            target_count=2,
+            output_format="jsonl",
+        )
+
+        assert result.success
+        output = tmp_path / "11_合成数据" / "synthetic.jsonl"
+        assert output.exists()
+        lines = output.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 2
 
     def test_synthesize_from_datarecipe_missing_schema(self, tmp_path):
         result = DataSynthesizer().synthesize_from_datarecipe(str(tmp_path))

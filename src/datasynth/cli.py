@@ -41,6 +41,15 @@ def main():
 )
 @click.option("-t", "--temperature", type=float, default=0.8, help="采样温度 (0.0-1.0)")
 @click.option("--batch-size", type=int, default=5, help="每批生成数量")
+@click.option("--max-retries", type=int, default=3, help="失败重试次数 (默认: 3)")
+@click.option("--retry-delay", type=float, default=2.0, help="重试间隔秒数 (默认: 2.0)")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "jsonl"]),
+    default="json",
+    help="输出格式 (默认: json)",
+)
 @click.option("--dry-run", is_flag=True, help="仅估算成本，不实际生成")
 def generate(
     analysis_dir: str,
@@ -50,6 +59,9 @@ def generate(
     provider: str,
     temperature: float,
     batch_size: int,
+    max_retries: int,
+    retry_delay: float,
+    output_format: str,
     dry_run: bool,
 ):
     """从 DataRecipe 分析结果生成合成数据
@@ -62,6 +74,8 @@ def generate(
         provider=provider,
         temperature=temperature,
         batch_size=batch_size,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
     )
 
     if dry_run:
@@ -91,6 +105,7 @@ def generate(
         output_path=output,
         target_count=count,
         on_progress=on_progress,
+        output_format=output_format,
     )
 
     click.echo("")  # New line after progress
@@ -120,6 +135,13 @@ def generate(
     default="anthropic",
     help="LLM 提供商",
 )
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "jsonl"]),
+    default="json",
+    help="输出格式 (默认: json)",
+)
 def create(
     schema_file: str,
     seeds_file: str,
@@ -127,6 +149,7 @@ def create(
     count: int,
     model: str,
     provider: str,
+    output_format: str,
 ):
     """从 Schema 和种子数据创建合成数据
 
@@ -176,6 +199,7 @@ def create(
         seed_samples=seed_samples,
         output_path=output,
         target_count=count,
+        output_format=output_format,
     )
 
     if result.success:
