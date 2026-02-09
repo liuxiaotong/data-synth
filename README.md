@@ -396,5 +396,5 @@ src/datasynth/
 [MIT](LICENSE)
 
 <div align="center">
-<sub>为数据团队提供低成本、高效率的数据扩充方案</sub>
+<sub><a href="https://github.com/liuxiaotong">knowlyr</a> 数据工程生态 · 种子到规模化数据合成</sub>
 </div>
