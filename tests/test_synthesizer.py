@@ -187,6 +187,47 @@ class TestDataSynthesizer:
         assert result.failed_count == 0
         assert s._call_llm.call_count == 2
 
+    def test_synthesize_concurrent(self, tmp_path):
+        """Test concurrent batch generation."""
+        cfg = SynthesisConfig(target_count=4, batch_size=2, concurrency=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 250))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=4,
+        )
+
+        assert result.success
+        # 2 batches x 2 samples, but dedup removes duplicates across batches
+        # (both batches return same LLM_RESPONSE)
+        assert result.generated_count == 2  # deduped across batches
+        assert result.dedup_count == 2
+        assert s._call_llm.call_count == 2  # 2 batches
+
+    def test_synthesize_concurrent_no_dedup(self, tmp_path):
+        """Test concurrent generation without dedup."""
+        cfg = SynthesisConfig(target_count=4, batch_size=2, concurrency=2, validate=False)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(LLM_RESPONSE, 250))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=4,
+        )
+
+        assert result.success
+        assert result.generated_count == 4  # no dedup
+        assert result.dedup_count == 0
+
     def test_dedup_within_batch(self, tmp_path):
         """Test that duplicate samples within a batch are removed."""
         duped_response = json.dumps(

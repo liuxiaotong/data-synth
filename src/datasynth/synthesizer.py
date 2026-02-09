@@ -3,7 +3,9 @@
 import json
 import logging
 import random
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -118,27 +120,27 @@ class DataSynthesizer:
             if self.config.validate:
                 for seed in seed_samples:
                     seen.add(self._fingerprint(seed))
+            lock = threading.Lock()
 
-            # Generate in batches
-            all_samples = []
+            # Shared mutable state
+            all_samples: list[Dict[str, Any]] = []
             failed = 0
             deduped = 0
             total_tokens = 0
-            batches = (count + self.config.batch_size - 1) // self.config.batch_size
 
-            for batch_idx in range(batches):
-                remaining = count - len(all_samples)
-                batch_count = min(self.config.batch_size, remaining)
+            # Prepare batch tasks
+            num_batches = (count + self.config.batch_size - 1) // self.config.batch_size
+            batch_counts = []
+            for i in range(num_batches):
+                remaining = count - i * self.config.batch_size
+                batch_counts.append(min(self.config.batch_size, remaining))
 
-                if batch_count <= 0:
-                    break
-
-                # Select random seed samples for this batch
+            def run_batch(batch_idx: int, batch_count: int) -> tuple:
+                """Run a single batch. Returns (samples, tokens, failed, deduped)."""
                 selected_seeds = random.sample(
                     seed_samples, min(self.config.seed_sample_count, len(seed_samples))
                 )
 
-                # Build prompt
                 prompt = build_synthesis_prompt(
                     schema=data_schema,
                     seed_samples=selected_seeds,
@@ -147,31 +149,26 @@ class DataSynthesizer:
                     diversity_factor=self.config.diversity_factor,
                 )
 
-                # Generate with retries
-                batch_success = False
                 for attempt in range(1, self.config.max_retries + 1):
                     try:
                         response_text, tokens = self._call_llm(prompt)
-                        total_tokens += tokens
-
-                        # Parse response
                         samples = parse_generated_samples(response_text, data_schema)
 
-                        # Dedup
+                        # Thread-safe dedup
+                        batch_deduped = 0
                         if self.config.validate:
                             unique = []
-                            for s in samples:
-                                fp = self._fingerprint(s)
-                                if fp not in seen:
-                                    seen.add(fp)
-                                    unique.append(s)
-                                else:
-                                    deduped += 1
+                            with lock:
+                                for s in samples:
+                                    fp = self._fingerprint(s)
+                                    if fp not in seen:
+                                        seen.add(fp)
+                                        unique.append(s)
+                                    else:
+                                        batch_deduped += 1
                             samples = unique
 
-                        all_samples.extend(samples)
-                        batch_success = True
-                        break
+                        return samples, tokens, 0, batch_deduped
 
                     except Exception as e:
                         logger.warning(
@@ -184,12 +181,35 @@ class DataSynthesizer:
                         if attempt < self.config.max_retries:
                             time.sleep(self.config.retry_delay)
 
-                if not batch_success:
-                    failed += batch_count
+                return [], 0, batch_count, 0
 
-                # Progress callback
-                if on_progress:
-                    on_progress(len(all_samples), count)
+            # Execute batches
+            workers = min(self.config.concurrency, num_batches)
+            if workers <= 1:
+                # Sequential execution
+                for batch_idx, bc in enumerate(batch_counts):
+                    samples, tokens, batch_failed, batch_deduped = run_batch(batch_idx, bc)
+                    all_samples.extend(samples)
+                    total_tokens += tokens
+                    failed += batch_failed
+                    deduped += batch_deduped
+                    if on_progress:
+                        on_progress(len(all_samples), count)
+            else:
+                # Concurrent execution
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    futures = {
+                        executor.submit(run_batch, idx, bc): idx
+                        for idx, bc in enumerate(batch_counts)
+                    }
+                    for future in as_completed(futures):
+                        samples, tokens, batch_failed, batch_deduped = future.result()
+                        all_samples.extend(samples)
+                        total_tokens += tokens
+                        failed += batch_failed
+                        deduped += batch_deduped
+                        if on_progress:
+                            on_progress(len(all_samples), count)
 
             result.generated_count = len(all_samples)
             result.failed_count = failed

@@ -44,6 +44,7 @@ def main():
 @click.option("--batch-size", type=int, default=5, help="每批生成数量")
 @click.option("--max-retries", type=int, default=3, help="失败重试次数 (默认: 3)")
 @click.option("--retry-delay", type=float, default=2.0, help="重试间隔秒数 (默认: 2.0)")
+@click.option("--concurrency", type=int, default=1, help="并发批次数 (默认: 1)")
 @click.option(
     "--format",
     "output_format",
@@ -68,6 +69,7 @@ def generate(
     batch_size: int,
     max_retries: int,
     retry_delay: float,
+    concurrency: int,
     output_format: str,
     dry_run: bool,
     post_hook: Optional[str],
@@ -84,6 +86,7 @@ def generate(
         batch_size=batch_size,
         max_retries=max_retries,
         retry_delay=retry_delay,
+        concurrency=concurrency,
     )
 
     if dry_run:
