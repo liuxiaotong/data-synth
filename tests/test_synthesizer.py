@@ -187,6 +187,83 @@ class TestDataSynthesizer:
         assert result.failed_count == 0
         assert s._call_llm.call_count == 2
 
+    def test_dedup_within_batch(self, tmp_path):
+        """Test that duplicate samples within a batch are removed."""
+        duped_response = json.dumps(
+            [
+                {"instruction": "Q1", "response": "A1"},
+                {"instruction": "Q1", "response": "A1"},  # duplicate
+                {"instruction": "Q2", "response": "A2"},
+            ],
+            ensure_ascii=False,
+        )
+        cfg = SynthesisConfig(target_count=3, batch_size=3)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(duped_response, 300))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=3,
+        )
+
+        assert result.generated_count == 2
+        assert result.dedup_count == 1
+
+    def test_dedup_against_seeds(self, tmp_path):
+        """Test that samples matching seed data are removed."""
+        # Return a sample identical to a seed
+        seed_copy_response = json.dumps(
+            [
+                {"instruction": "什么是 AI？", "response": "AI 是人工智能的缩写..."},  # same as seed
+                {"instruction": "新问题", "response": "新回答"},
+            ],
+            ensure_ascii=False,
+        )
+        cfg = SynthesisConfig(target_count=2, batch_size=2)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(seed_copy_response, 200))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+        )
+
+        assert result.generated_count == 1
+        assert result.dedup_count == 1
+
+    def test_dedup_disabled(self, tmp_path):
+        """Test that dedup is skipped when validate=False."""
+        duped_response = json.dumps(
+            [
+                {"instruction": "Q1", "response": "A1"},
+                {"instruction": "Q1", "response": "A1"},  # duplicate
+            ],
+            ensure_ascii=False,
+        )
+        cfg = SynthesisConfig(target_count=2, batch_size=2, validate=False)
+        s = DataSynthesizer(cfg)
+        s._client = MagicMock()
+        s._provider = "anthropic"
+        s._call_llm = MagicMock(return_value=(duped_response, 200))
+
+        result = s.synthesize(
+            schema=SAMPLE_SCHEMA,
+            seed_samples=SAMPLE_SEEDS,
+            output_path=str(tmp_path / "out.json"),
+            target_count=2,
+        )
+
+        assert result.generated_count == 2  # duplicates kept
+        assert result.dedup_count == 0
+
     def test_synthesize_from_datarecipe(self, tmp_path):
         """Test synthesize_from_datarecipe reads correct files."""
         # Set up directory structure

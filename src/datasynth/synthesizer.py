@@ -24,6 +24,7 @@ class SynthesisResult:
     output_path: str = ""
     generated_count: int = 0
     failed_count: int = 0
+    dedup_count: int = 0
     total_tokens: int = 0
     estimated_cost: float = 0.0
     duration_seconds: float = 0.0
@@ -43,6 +44,11 @@ class DataSynthesizer:
         self.config = config or SynthesisConfig()
         self._client = None
         self._provider = None
+
+    @staticmethod
+    def _fingerprint(sample: Dict[str, Any]) -> str:
+        """Create a dedup key from a sample by sorting and serializing."""
+        return json.dumps(sample, sort_keys=True, ensure_ascii=False)
 
     def _init_client(self):
         """Initialize LLM client based on provider."""
@@ -107,9 +113,16 @@ class DataSynthesizer:
             # Determine target count
             count = target_count or self.config.target_count
 
+            # Build dedup index from seed samples
+            seen: set[str] = set()
+            if self.config.validate:
+                for seed in seed_samples:
+                    seen.add(self._fingerprint(seed))
+
             # Generate in batches
             all_samples = []
             failed = 0
+            deduped = 0
             total_tokens = 0
             batches = (count + self.config.batch_size - 1) // self.config.batch_size
 
@@ -143,6 +156,19 @@ class DataSynthesizer:
 
                         # Parse response
                         samples = parse_generated_samples(response_text, data_schema)
+
+                        # Dedup
+                        if self.config.validate:
+                            unique = []
+                            for s in samples:
+                                fp = self._fingerprint(s)
+                                if fp not in seen:
+                                    seen.add(fp)
+                                    unique.append(s)
+                                else:
+                                    deduped += 1
+                            samples = unique
+
                         all_samples.extend(samples)
                         batch_success = True
                         break
@@ -167,6 +193,7 @@ class DataSynthesizer:
 
             result.generated_count = len(all_samples)
             result.failed_count = failed
+            result.dedup_count = deduped
             result.total_tokens = total_tokens
             result.estimated_cost = self._estimate_cost(total_tokens)
 

@@ -114,6 +114,8 @@ def generate(
         click.echo(f"✓ 生成成功: {result.output_path}")
         click.echo(f"  生成数量: {result.generated_count}")
         click.echo(f"  失败数量: {result.failed_count}")
+        if result.dedup_count:
+            click.echo(f"  去重数量: {result.dedup_count}")
         click.echo(f"  Token 用量: {result.total_tokens:,}")
         click.echo(f"  预计成本: ${result.estimated_cost:.4f}")
         click.echo(f"  耗时: {result.duration_seconds:.1f}s")
