@@ -350,6 +350,12 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 | `-p, --provider` | 提供商 | anthropic |
 | `-t, --temperature` | 采样温度 | 0.8 |
 | `--batch-size` | 每批数量 | 5 |
+| `--max-retries` | 失败重试次数 | 3 |
+| `--retry-delay` | 重试间隔秒数 | 2.0 |
+| `--concurrency` | 并发批次数 | 1 |
+| `--format` | 输出格式 (`json` / `jsonl`) | json |
+| `--post-hook` | 生成后执行的命令 | — |
+| `--dry-run` | 仅估算成本，不生成 | — |
 
 ---
 

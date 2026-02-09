@@ -160,6 +160,11 @@ def generate(
     default="anthropic",
     help="LLM 提供商",
 )
+@click.option("-t", "--temperature", type=float, default=0.8, help="采样温度 (0.0-1.0)")
+@click.option("--batch-size", type=int, default=5, help="每批生成数量")
+@click.option("--max-retries", type=int, default=3, help="失败重试次数 (默认: 3)")
+@click.option("--retry-delay", type=float, default=2.0, help="重试间隔秒数 (默认: 2.0)")
+@click.option("--concurrency", type=int, default=1, help="并发批次数 (默认: 1)")
 @click.option(
     "--format",
     "output_format",
@@ -174,6 +179,11 @@ def create(
     count: int,
     model: str,
     provider: str,
+    temperature: float,
+    batch_size: int,
+    max_retries: int,
+    retry_delay: float,
+    concurrency: int,
     output_format: str,
 ):
     """从 Schema 和种子数据创建合成数据
@@ -216,6 +226,11 @@ def create(
         target_count=count,
         model=model,
         provider=provider,
+        temperature=temperature,
+        batch_size=batch_size,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
+        concurrency=concurrency,
     )
 
     synthesizer = DataSynthesizer(config)
@@ -230,6 +245,8 @@ def create(
     if result.success:
         click.echo(f"✓ 生成成功: {result.output_path}")
         click.echo(f"  生成数量: {result.generated_count}")
+        if result.dedup_count:
+            click.echo(f"  去重数量: {result.dedup_count}")
     else:
         click.echo(f"✗ 生成失败: {result.error}", err=True)
         sys.exit(1)
