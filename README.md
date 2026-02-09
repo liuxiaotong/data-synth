@@ -2,8 +2,8 @@
 
 # DataSynth
 
-**数据合成工具 - 基于种子数据批量生成高质量训练数据**  
-**Seed-to-scale synthetic data engine built for LLM workflows**
+**数据合成工具 — 基于种子数据批量生成高质量训练数据**
+**Seed-to-scale synthetic data engine for LLM training workflows**
 
 [![PyPI](https://img.shields.io/pypi/v/knowlyr-datasynth?color=blue)](https://pypi.org/project/knowlyr-datasynth/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
