@@ -531,6 +531,7 @@ class InteractiveSynthesizer:
         seed_samples: List[Dict[str, Any]],
         count: int = 10,
         guidelines: Optional[str] = None,
+        data_type: str = "auto",
     ) -> Dict[str, Any]:
         """Prepare synthesis prompt for interactive generation.
 
@@ -538,13 +539,27 @@ class InteractiveSynthesizer:
         """
         data_schema = DataSchema.from_dict(schema)
 
-        prompt = build_synthesis_prompt(
-            schema=data_schema,
-            seed_samples=seed_samples[:5],  # Limit seed samples
-            count=count,
-            guidelines=guidelines,
-            diversity_factor=0.5,
-        )
+        # Resolve data type
+        resolved_type = data_type
+        if resolved_type == "auto":
+            resolved_type = data_schema.detect_data_type()
+
+        if resolved_type:
+            prompt = get_specialized_prompt(
+                data_type=resolved_type,
+                schema=data_schema,
+                seed_samples=seed_samples[:5],
+                count=count,
+                guidelines=guidelines,
+            )
+        else:
+            prompt = build_synthesis_prompt(
+                schema=data_schema,
+                seed_samples=seed_samples[:5],
+                count=count,
+                guidelines=guidelines,
+                diversity_factor=0.5,
+            )
 
         return {
             "prompt": prompt,

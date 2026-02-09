@@ -55,7 +55,7 @@ class TestVersion:
     def test_version(self, runner):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.3.0" in result.output
+        assert "0.3.1" in result.output
 
 
 class TestEstimate:
@@ -503,7 +503,8 @@ class TestPrepare:
     def test_prepare_stdout(self, runner, datarecipe_dir):
         result = runner.invoke(main, ["prepare", str(datarecipe_dir), "-n", "5"])
         assert result.exit_code == 0
-        assert "数据合成任务" in result.output
+        # Auto-detect instruction_response → specialized prompt
+        assert "指令-回复" in result.output
         assert "预期生成 5 条数据" in result.output
 
     def test_prepare_to_file(self, runner, datarecipe_dir, tmp_path):
@@ -528,3 +529,121 @@ class TestPrepare:
         result = runner.invoke(main, ["prepare", str(tmp_path)])
         assert result.exit_code == 1
         assert "种子数据未找到" in result.output
+
+    def test_prepare_with_data_type(self, runner, datarecipe_dir):
+        result = runner.invoke(
+            main, ["prepare", str(datarecipe_dir), "-n", "3", "--data-type", "preference"]
+        )
+        assert result.exit_code == 0
+        assert "偏好对比" in result.output
+
+    def test_prepare_with_guidelines(self, runner, datarecipe_dir):
+        """prepare should load guidelines from 03_标注规范."""
+        guidelines_dir = datarecipe_dir / "03_标注规范"
+        guidelines_dir.mkdir()
+        (guidelines_dir / "ANNOTATION_SPEC.md").write_text("自定义标注要求", encoding="utf-8")
+
+        result = runner.invoke(main, ["prepare", str(datarecipe_dir), "-n", "3"])
+        assert result.exit_code == 0
+        assert "自定义标注要求" in result.output
+
+
+class TestCreateDryRun:
+    def test_create_dry_run(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"project_name": "T", "fields": [{"name": "text", "type": "text"}]}),
+            encoding="utf-8",
+        )
+        seeds_file = tmp_path / "seeds.json"
+        seeds_file.write_text(json.dumps([{"text": "hello"}]), encoding="utf-8")
+
+        result = runner.invoke(
+            main,
+            ["create", str(schema_file), str(seeds_file), "-o", str(tmp_path / "o.json"), "--dry-run"],
+        )
+        assert result.exit_code == 0
+        assert "成本估算" in result.output
+        assert "目标数量: 100" in result.output
+
+    def test_create_post_hook(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"project_name": "T", "fields": [{"name": "text", "type": "text"}]}),
+            encoding="utf-8",
+        )
+        seeds_file = tmp_path / "seeds.json"
+        seeds_file.write_text(json.dumps([{"text": "hello"}]), encoding="utf-8")
+
+        mock_result = SynthesisResult(
+            success=True, output_path=str(tmp_path / "o.json"), generated_count=5,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth, patch(
+            "datasynth.cli.subprocess.run"
+        ) as mock_run:
+            MockSynth.return_value.synthesize.return_value = mock_result
+            mock_run.return_value.returncode = 0
+            result = runner.invoke(
+                main,
+                [
+                    "create", str(schema_file), str(seeds_file),
+                    "-o", str(tmp_path / "o.json"), "-n", "5",
+                    "--post-hook", "echo {output_path} {count}",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert "post-hook" in result.output
+        mock_run.assert_called_once()
+
+
+class TestDryRunSchemaInfo:
+    def test_generate_dry_run_shows_schema(self, runner, datarecipe_dir):
+        result = runner.invoke(
+            main, ["generate", str(datarecipe_dir), "--dry-run"]
+        )
+        assert result.exit_code == 0
+        assert "Schema 信息" in result.output
+        assert "instruction" in result.output
+        assert "instruction_response" in result.output
+
+    def test_generate_dry_run_shows_guidelines(self, runner, datarecipe_dir):
+        guidelines_dir = datarecipe_dir / "03_标注规范"
+        guidelines_dir.mkdir()
+        (guidelines_dir / "ANNOTATION_SPEC.md").write_text("spec", encoding="utf-8")
+
+        result = runner.invoke(
+            main, ["generate", str(datarecipe_dir), "--dry-run"]
+        )
+        assert result.exit_code == 0
+        assert "标注规范: ✓" in result.output
+
+
+class TestConfigFile:
+    def test_generate_with_config(self, runner, datarecipe_dir, tmp_path):
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps({"target_count": 50, "model": "gpt-4o", "batch_size": 10}),
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(
+            main, ["generate", str(datarecipe_dir), "--dry-run", "--config", str(config_file)]
+        )
+        assert result.exit_code == 0
+        assert "gpt-4o" in result.output
+
+    def test_cli_overrides_config(self, runner, datarecipe_dir, tmp_path):
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps({"model": "gpt-4o"}),
+            encoding="utf-8",
+        )
+
+        # CLI -m should override config
+        result = runner.invoke(
+            main, ["generate", str(datarecipe_dir), "--dry-run", "--config", str(config_file), "-m", "claude-haiku-3-5"]
+        )
+        assert result.exit_code == 0
+        assert "claude-haiku-3-5" in result.output

@@ -13,6 +13,20 @@ from datasynth import __version__
 from datasynth.config import SynthesisConfig
 from datasynth.synthesizer import DataSynthesizer, InteractiveSynthesizer
 
+# Mapping from config file keys to SynthesisConfig fields
+_CONFIG_KEYS = {
+    "target_count", "model", "provider", "temperature", "diversity_factor",
+    "batch_size", "max_retries", "retry_delay", "concurrency", "validate",
+    "seed_sample_count", "data_type", "max_tokens_per_sample",
+}
+
+
+def _load_config_file(path: str) -> dict:
+    """Load a JSON config file and return valid SynthesisConfig fields."""
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return {k: v for k, v in data.items() if k in _CONFIG_KEYS}
+
 
 @click.group()
 @click.version_option(version=__version__, prog_name="datasynth")
@@ -73,6 +87,7 @@ def main(verbose: bool):
 )
 @click.option("--resume", is_flag=True, help="增量模式: 从已有输出文件继续生成")
 @click.option("--stats", is_flag=True, help="输出生成统计报告")
+@click.option("--config", "config_file", type=click.Path(exists=True), help="配置文件 (JSON)")
 def generate(
     analysis_dir: str,
     output: Optional[str],
@@ -90,26 +105,55 @@ def generate(
     data_type: str,
     resume: bool,
     stats: bool,
+    config_file: Optional[str],
 ):
     """从 DataRecipe 分析结果生成合成数据
 
     ANALYSIS_DIR: DataRecipe 分析输出目录的路径
     """
+    # Load config file as base, explicit CLI flags override
+    file_cfg = _load_config_file(config_file) if config_file else {}
+    ctx = click.get_current_context()
+
+    def _pick(param_name: str, cli_val, cfg_key: str = ""):
+        """Use CLI value if explicitly provided, else config file, else CLI default."""
+        src = ctx.get_parameter_source(param_name)
+        if src == click.core.ParameterSource.COMMANDLINE:
+            return cli_val
+        return file_cfg.get(cfg_key or param_name, cli_val)
+
+    count = _pick("count", count, "target_count")
     config = SynthesisConfig(
         target_count=count,
-        model=model,
-        provider=provider,
-        temperature=temperature,
-        batch_size=batch_size,
-        max_retries=max_retries,
-        retry_delay=retry_delay,
-        concurrency=concurrency,
-        data_type=data_type,
+        model=_pick("model", model),
+        provider=_pick("provider", provider),
+        temperature=_pick("temperature", temperature),
+        batch_size=_pick("batch_size", batch_size),
+        max_retries=_pick("max_retries", max_retries),
+        retry_delay=_pick("retry_delay", retry_delay),
+        concurrency=_pick("concurrency", concurrency),
+        data_type=_pick("data_type", data_type),
     )
 
     if dry_run:
-        # Just estimate cost
         estimate = config.estimate_cost(count)
+        # Try to load schema for extra info
+        schema_path = Path(analysis_dir) / "04_复刻指南" / "DATA_SCHEMA.json"
+        if schema_path.exists():
+            with open(schema_path, "r", encoding="utf-8") as f:
+                schema_data = json.load(f)
+            from datasynth.config import DataSchema
+
+            ds = DataSchema.from_dict(schema_data)
+            detected = ds.detect_data_type()
+            effective_type = data_type if data_type != "auto" else (detected or "通用")
+            click.echo("Schema 信息:")
+            click.echo(f"  项目: {ds.project_name or '(未指定)'}")
+            click.echo(f"  字段: {', '.join(f.name for f in ds.fields)}")
+            click.echo(f"  数据类型: {effective_type}")
+            guidelines_path = Path(analysis_dir) / "03_标注规范" / "ANNOTATION_SPEC.md"
+            if guidelines_path.exists():
+                click.echo("  标注规范: ✓ 已加载")
         click.echo("成本估算:")
         click.echo(f"  目标数量: {estimate['target_count']}")
         click.echo(f"  预计批次: {estimate['estimated_batches']}")
@@ -208,6 +252,14 @@ def generate(
 )
 @click.option("--resume", is_flag=True, help="增量模式: 从已有输出文件继续生成")
 @click.option("--stats", is_flag=True, help="输出生成统计报告")
+@click.option("--dry-run", is_flag=True, help="仅估算成本，不实际生成")
+@click.option(
+    "--post-hook",
+    type=str,
+    default=None,
+    help="生成成功后执行的命令，支持 {output_path} {count} 变量",
+)
+@click.option("--config", "config_file", type=click.Path(exists=True), help="配置文件 (JSON)")
 def create(
     schema_file: str,
     seeds_file: str,
@@ -224,6 +276,9 @@ def create(
     data_type: str,
     resume: bool,
     stats: bool,
+    dry_run: bool,
+    post_hook: Optional[str],
+    config_file: Optional[str],
 ):
     """从 Schema 和种子数据创建合成数据
 
@@ -256,22 +311,45 @@ def create(
         click.echo("✗ 种子数据为空", err=True)
         sys.exit(1)
 
+    # Load config file as base, explicit CLI flags override
+    file_cfg = _load_config_file(config_file) if config_file else {}
+    ctx = click.get_current_context()
+
+    def _pick(param_name: str, cli_val, cfg_key: str = ""):
+        src = ctx.get_parameter_source(param_name)
+        if src == click.core.ParameterSource.COMMANDLINE:
+            return cli_val
+        return file_cfg.get(cfg_key or param_name, cli_val)
+
+    count = _pick("count", count, "target_count")
+    config = SynthesisConfig(
+        target_count=count,
+        model=_pick("model", model),
+        provider=_pick("provider", provider),
+        temperature=_pick("temperature", temperature),
+        batch_size=_pick("batch_size", batch_size),
+        max_retries=_pick("max_retries", max_retries),
+        retry_delay=_pick("retry_delay", retry_delay),
+        concurrency=_pick("concurrency", concurrency),
+        data_type=_pick("data_type", data_type),
+    )
+
+    if dry_run:
+        estimate = config.estimate_cost(count)
+        click.echo("成本估算:")
+        click.echo(f"  目标数量: {estimate['target_count']}")
+        click.echo(f"  预计批次: {estimate['estimated_batches']}")
+        click.echo(
+            f"  预计 Token: {estimate['estimated_input_tokens'] + estimate['estimated_output_tokens']:,}"
+        )
+        click.echo(f"  预计成本: ${estimate['estimated_cost_usd']:.2f}")
+        click.echo(f"  模型: {estimate['model']}")
+        return
+
     click.echo("正在生成合成数据...")
     click.echo(f"  Schema: {schema_file}")
     click.echo(f"  种子数量: {len(seed_samples)}")
     click.echo(f"  目标数量: {count}")
-
-    config = SynthesisConfig(
-        target_count=count,
-        model=model,
-        provider=provider,
-        temperature=temperature,
-        batch_size=batch_size,
-        max_retries=max_retries,
-        retry_delay=retry_delay,
-        concurrency=concurrency,
-        data_type=data_type,
-    )
 
     synthesizer = DataSynthesizer(config)
     result = synthesizer.synthesize(
@@ -294,6 +372,17 @@ def create(
             with open(stats_path, "w", encoding="utf-8") as f:
                 json.dump(result.stats, f, indent=2, ensure_ascii=False)
             click.echo(f"  统计报告: {stats_path}")
+
+        # Run post-hook
+        if post_hook:
+            cmd = post_hook.format(
+                output_path=result.output_path,
+                count=result.generated_count,
+            )
+            click.echo(f"  执行 post-hook: {cmd}")
+            hook_result = subprocess.run(cmd, shell=True)
+            if hook_result.returncode != 0:
+                click.echo(f"  ⚠ post-hook 退出码: {hook_result.returncode}", err=True)
     else:
         click.echo(f"✗ 生成失败: {result.error}", err=True)
         sys.exit(1)
@@ -303,10 +392,17 @@ def create(
 @click.argument("analysis_dir", type=click.Path(exists=True))
 @click.option("-n", "--count", type=int, default=10, help="生成数量")
 @click.option("-o", "--output", type=click.Path(), help="Prompt 输出路径")
+@click.option(
+    "--data-type",
+    type=click.Choice(["auto", "instruction_response", "preference", "multi_turn"]),
+    default="auto",
+    help="数据类型 (auto=自动检测)",
+)
 def prepare(
     analysis_dir: str,
     count: int,
     output: Optional[str],
+    data_type: str,
 ):
     """准备合成 Prompt (交互模式)
 
@@ -341,11 +437,19 @@ def prepare(
         else:
             seed_samples.append(s)
 
+    # Load guidelines if available
+    guidelines = None
+    guidelines_path = analysis_dir / "03_标注规范" / "ANNOTATION_SPEC.md"
+    if guidelines_path.exists():
+        guidelines = guidelines_path.read_text(encoding="utf-8")
+
     synthesizer = InteractiveSynthesizer()
     result = synthesizer.prepare_synthesis(
         schema=schema,
         seed_samples=seed_samples,
         count=count,
+        guidelines=guidelines,
+        data_type=data_type,
     )
 
     if output:
