@@ -8,6 +8,7 @@ from datasynth.prompts import (
     extract_json_array,
     extract_json_objects,
     format_seed_samples,
+    get_specialized_prompt,
     parse_generated_samples,
 )
 
@@ -88,6 +89,54 @@ class TestBuildSynthesisPrompt:
         )
 
         assert "较大变化" in prompt
+
+
+class TestGetSpecializedPrompt:
+    """Tests for get_specialized_prompt."""
+
+    def test_instruction_response(self, sample_schema, sample_seeds):
+        prompt = get_specialized_prompt("instruction_response", sample_schema, sample_seeds, 5)
+        assert "指令-回复" in prompt
+        assert "5" in prompt
+
+    def test_preference(self, sample_seeds):
+        schema = DataSchema.from_dict({
+            "project_name": "偏好测试",
+            "fields": [
+                {"name": "prompt", "type": "text"},
+                {"name": "chosen", "type": "text"},
+                {"name": "rejected", "type": "text"},
+            ],
+        })
+        prompt = get_specialized_prompt("preference", schema, sample_seeds, 3)
+        assert "偏好数据" in prompt
+
+    def test_multi_turn(self, sample_seeds):
+        schema = DataSchema.from_dict({
+            "project_name": "对话测试",
+            "fields": [{"name": "conversation", "type": "list"}],
+        })
+        prompt = get_specialized_prompt("multi_turn", schema, sample_seeds, 3)
+        assert "多轮对话" in prompt
+
+    def test_with_guidelines(self, sample_schema, sample_seeds):
+        prompt = get_specialized_prompt(
+            "instruction_response", sample_schema, sample_seeds, 5,
+            guidelines="回复必须简洁",
+        )
+        assert "指令-回复" in prompt
+        assert "回复必须简洁" in prompt
+        assert "额外指南" in prompt
+
+    def test_without_guidelines(self, sample_schema, sample_seeds):
+        prompt = get_specialized_prompt(
+            "instruction_response", sample_schema, sample_seeds, 5,
+        )
+        assert "额外指南" not in prompt
+
+    def test_unknown_type_falls_back(self, sample_schema, sample_seeds):
+        prompt = get_specialized_prompt("unknown_type", sample_schema, sample_seeds, 5)
+        assert "数据合成任务" in prompt  # generic prompt marker
 
 
 class TestFormatSeedSamples:

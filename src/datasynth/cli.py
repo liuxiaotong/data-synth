@@ -1,6 +1,7 @@
 """DataSynth CLI - 命令行界面."""
 
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -15,12 +16,17 @@ from datasynth.synthesizer import DataSynthesizer, InteractiveSynthesizer
 
 @click.group()
 @click.version_option(version=__version__, prog_name="datasynth")
-def main():
+@click.option("-v", "--verbose", is_flag=True, help="显示详细日志 (DEBUG 级别)")
+def main(verbose: bool):
     """DataSynth - 数据合成工具
 
     基于种子数据和 Schema 批量生成高质量训练数据。
     """
-    pass
+    level = logging.DEBUG if verbose else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(name)s %(levelname)s: %(message)s",
+    )
 
 
 @main.command()
@@ -191,6 +197,7 @@ def generate(
     default="auto",
     help="数据类型 (auto=自动检测)",
 )
+@click.option("--resume", is_flag=True, help="增量模式: 从已有输出文件继续生成")
 def create(
     schema_file: str,
     seeds_file: str,
@@ -205,6 +212,7 @@ def create(
     concurrency: int,
     output_format: str,
     data_type: str,
+    resume: bool,
 ):
     """从 Schema 和种子数据创建合成数据
 
@@ -261,6 +269,7 @@ def create(
         output_path=output,
         target_count=count,
         output_format=output_format,
+        resume=resume,
     )
 
     if result.success:

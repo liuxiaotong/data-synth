@@ -225,7 +225,7 @@ PROMPT_TEMPLATES = {
 
 ## 种子样例
 {seed_samples}
-
+{guidelines_section}
 ## 生成要求
 - 生成 {count} 条数据
 - 指令应该清晰、具体
@@ -249,7 +249,7 @@ PROMPT_TEMPLATES = {
 
 ## 种子样例
 {seed_samples}
-
+{guidelines_section}
 ## 生成要求
 - 生成 {count} 条数据
 - chosen 回复应该明显优于 rejected
@@ -273,7 +273,7 @@ PROMPT_TEMPLATES = {
 
 ## 种子样例
 {seed_samples}
-
+{guidelines_section}
 ## 生成要求
 - 生成 {count} 条对话
 - 每条对话包含 2-5 轮交互
@@ -302,16 +302,22 @@ def get_specialized_prompt(
     schema: DataSchema,
     seed_samples: List[Dict[str, Any]],
     count: int,
+    guidelines: str | None = None,
 ) -> str:
     """Get specialized prompt for specific data types."""
     template = PROMPT_TEMPLATES.get(data_type)
 
     if not template:
         # Fall back to generic prompt
-        return build_synthesis_prompt(schema, seed_samples, count)
+        return build_synthesis_prompt(schema, seed_samples, count, guidelines=guidelines)
+
+    guidelines_section = ""
+    if guidelines:
+        guidelines_section = f"\n## 额外指南\n\n{guidelines[:2000]}\n"
 
     return template.format(
         schema_description=schema.to_prompt_description(),
         seed_samples=format_seed_samples(seed_samples, schema),
+        guidelines_section=guidelines_section,
         count=count,
     )

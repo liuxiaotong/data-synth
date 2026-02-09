@@ -553,8 +553,8 @@ class TestDataSynthesizer:
         prompt_used = s._call_llm.call_args[0][0]
         assert "指令-回复" in prompt_used
 
-    def test_specialized_prompt_falls_back_with_guidelines(self, tmp_path):
-        """When guidelines present, use generic prompt even if data_type matches."""
+    def test_specialized_prompt_includes_guidelines(self, tmp_path):
+        """Specialized prompt should include guidelines when present."""
         cfg = SynthesisConfig(target_count=2, batch_size=2, data_type="auto")
         s = DataSynthesizer(cfg)
         s._client = MagicMock()
@@ -572,6 +572,7 @@ class TestDataSynthesizer:
         assert result.success
         prompt_used = s._call_llm.call_args[0][0]
         assert "自定义指南" in prompt_used
+        assert "指令-回复" in prompt_used  # still uses specialized template
 
     def test_resume_continues_from_existing(self, tmp_path):
         """Test resume loads existing and generates remaining."""

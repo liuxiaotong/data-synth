@@ -189,13 +189,13 @@ class DataSynthesizer:
                     seed_samples, min(self.config.seed_sample_count, len(seed_samples))
                 )
 
-                # Use specialized prompt when available and no custom guidelines
-                if data_type and not guidelines:
+                if data_type:
                     prompt = get_specialized_prompt(
                         data_type=data_type,
                         schema=data_schema,
                         seed_samples=selected_seeds,
                         count=batch_count,
+                        guidelines=guidelines,
                     )
                 else:
                     prompt = build_synthesis_prompt(

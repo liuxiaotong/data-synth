@@ -397,6 +397,47 @@ class TestCreate:
         assert "种子数据为空" in result.output
 
 
+    def test_create_with_resume(self, runner, tmp_path):
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text(
+            json.dumps({"project_name": "T", "fields": [{"name": "text", "type": "text"}]}),
+            encoding="utf-8",
+        )
+
+        seeds_file = tmp_path / "seeds.json"
+        seeds_file.write_text(json.dumps([{"text": "hello"}]), encoding="utf-8")
+
+        mock_result = SynthesisResult(success=True, output_path=str(tmp_path / "o.json"), generated_count=5)
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize.return_value = mock_result
+            result = runner.invoke(
+                main,
+                ["create", str(schema_file), str(seeds_file), "-o", str(tmp_path / "o.json"), "--resume"],
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = MockSynth.return_value.synthesize.call_args[1]
+        assert call_kwargs["resume"] is True
+
+
+class TestVerbose:
+    def test_verbose_flag(self, runner, datarecipe_dir):
+        mock_result = SynthesisResult(
+            success=True, output_path="x", generated_count=2,
+            failed_count=0, total_tokens=100, estimated_cost=0.01, duration_seconds=0.5,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            result = runner.invoke(
+                main, ["-v", "generate", str(datarecipe_dir), "-n", "2"]
+            )
+
+        assert result.exit_code == 0
+        assert "生成成功" in result.output
+
+
 class TestPrepare:
     def test_prepare_stdout(self, runner, datarecipe_dir):
         result = runner.invoke(main, ["prepare", str(datarecipe_dir), "-n", "5"])

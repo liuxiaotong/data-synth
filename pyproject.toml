@@ -37,7 +37,7 @@ anthropic = ["anthropic>=0.18"]
 openai = ["openai>=1.0"]
 llm = ["anthropic>=0.18", "openai>=1.0"]
 mcp = ["mcp>=1.0"]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "pytest-asyncio", "ruff"]
 all = ["knowlyr-datasynth[llm,mcp,dev]"]
 
 [project.scripts]
