@@ -230,18 +230,35 @@ def create_server() -> "Server":
             )
 
             if result.success:
-                return [
-                    TextContent(
-                        type="text",
-                        text=f"✓ 合成完成:\n"
-                        f"- 输出路径: {result.output_path}\n"
-                        f"- 生成数量: {result.generated_count}\n"
-                        f"- 失败数量: {result.failed_count}\n"
-                        f"- Token 用量: {result.total_tokens:,}\n"
-                        f"- 预计成本: ${result.estimated_cost:.4f}\n"
-                        f"- 耗时: {result.duration_seconds:.1f}s",
-                    )
+                lines = [
+                    "✓ 合成完成:",
+                    f"- 输出路径: {result.output_path}",
+                    f"- 生成数量: {result.generated_count}",
+                    f"- 失败数量: {result.failed_count}",
                 ]
+                if result.dedup_count:
+                    lines.append(f"- 去重数量: {result.dedup_count}")
+                lines.extend([
+                    f"- Token 用量: {result.total_tokens:,}",
+                    f"- 预计成本: ${result.estimated_cost:.4f}",
+                    f"- 耗时: {result.duration_seconds:.1f}s",
+                ])
+                if result.stats:
+                    lines.append(f"\n统计概要:")
+                    lines.append(f"- 总样本数: {result.stats['total_samples']}")
+                    for fname, fstat in result.stats.get("fields", {}).items():
+                        ftype = fstat.get("type", "unknown")
+                        if ftype == "text":
+                            lines.append(
+                                f"- {fname}: 平均长度 {fstat['avg_length']}, "
+                                f"范围 [{fstat['min_length']}, {fstat['max_length']}]"
+                            )
+                        elif ftype == "numeric":
+                            lines.append(
+                                f"- {fname}: 平均 {fstat['avg']}, "
+                                f"范围 [{fstat['min']}, {fstat['max']}]"
+                            )
+                return [TextContent(type="text", text="\n".join(lines))]
             else:
                 return [TextContent(type="text", text=f"合成失败: {result.error}")]
 

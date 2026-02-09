@@ -33,6 +33,8 @@ Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质
 - **并发生成** — 多批次并行调用 LLM，线程安全去重
 - **增量续跑** — `--resume` 从已有输出继续，断点恢复不浪费
 - **重试策略** — 自动重试 + 温度递增，提高容错和多样性
+- **统计报告** — `--stats` 输出字段分布统计 (长度/范围/频率)
+- **精确成本** — 按模型实际定价计算 (Claude / GPT 全系列)
 - **后置钩子** — 生成完成后自动触发质检等下游命令
 
 ### 输入 / 输出示例 / Input & Output Samples
@@ -204,6 +206,39 @@ knowlyr-datasynth generate ./output/my_dataset/ -n 1000 \
 ```
 
 支持变量: `{analysis_dir}` `{output_path}` `{count}`
+
+### 统计报告 / Stats Report
+
+生成后输出字段分布统计：
+
+```bash
+knowlyr-datasynth generate ./output/my_dataset/ -n 1000 --stats
+```
+
+输出 `synthetic.stats.json`：
+
+```json
+{
+  "total_samples": 1000,
+  "fields": {
+    "instruction": {"type": "text", "count": 1000, "avg_length": 42.3, "min_length": 8, "max_length": 156},
+    "response": {"type": "text", "count": 1000, "avg_length": 201.5, "min_length": 30, "max_length": 892},
+    "quality": {"type": "numeric", "min": 1, "max": 5, "avg": 3.82, "distribution": {"1": 32, "2": 89, "3": 215, "4": 378, "5": 286}}
+  }
+}
+```
+
+### 模型定价 / Model Pricing
+
+成本估算自动匹配模型实际定价：
+
+| 模型 | 输入 ($/1K tokens) | 输出 ($/1K tokens) |
+|------|-------|--------|
+| Claude Opus | $0.015 | $0.075 |
+| Claude Sonnet | $0.003 | $0.015 |
+| Claude Haiku | $0.00025 | $0.00125 |
+| GPT-4o | $0.0025 | $0.01 |
+| GPT-4o Mini | $0.00015 | $0.0006 |
 
 ---
 
@@ -392,6 +427,7 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 | `knowlyr-datasynth generate <dir>` | 从 DataRecipe 分析结果生成 (API 模式) |
 | `knowlyr-datasynth generate <dir> --dry-run` | 仅估算成本 |
 | `knowlyr-datasynth generate <dir> --resume` | 增量续跑 |
+| `knowlyr-datasynth generate <dir> --stats` | 输出统计报告 |
 | `knowlyr-datasynth create <schema> <seeds> -o <out>` | 从自定义文件生成 |
 | `knowlyr-datasynth prepare <dir>` | 准备 Prompt (交互模式) |
 | `knowlyr-datasynth estimate -n <count>` | 估算成本 |
@@ -411,6 +447,7 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 | `--format` | 输出格式 (`json` / `jsonl`) | json |
 | `--data-type` | 数据类型 (`auto` / `instruction_response` / `preference` / `multi_turn`) | auto |
 | `--resume` | 增量续跑：从已有输出继续生成 | — |
+| `--stats` | 输出字段分布统计 JSON | — |
 | `--post-hook` | 生成后执行的命令 | — |
 | `--dry-run` | 仅估算成本，不生成 | — |
 
@@ -443,6 +480,11 @@ print(f"生成数量: {result.generated_count}")
 print(f"去重数量: {result.dedup_count}")
 print(f"失败数量: {result.failed_count}")
 print(f"成本: ${result.estimated_cost:.4f}")
+
+# 统计报告
+if result.stats:
+    for field, info in result.stats["fields"].items():
+        print(f"  {field}: {info}")
 ```
 
 ---

@@ -184,6 +184,41 @@ class TestSynthesizeData:
         assert "合成完成" in content[0].text
 
     @pytest.mark.asyncio
+    async def test_synthesize_with_stats(self, server, datarecipe_dir):
+        from datasynth.synthesizer import SynthesisResult
+
+        mock_result = SynthesisResult(
+            success=True,
+            output_path=str(datarecipe_dir / "out.json"),
+            generated_count=5,
+            failed_count=0,
+            dedup_count=1,
+            total_tokens=1000,
+            estimated_cost=0.01,
+            duration_seconds=1.0,
+            stats={
+                "total_samples": 5,
+                "fields": {
+                    "instruction": {"type": "text", "avg_length": 20.0, "min_length": 5, "max_length": 50, "count": 5, "missing": 0},
+                    "response": {"type": "text", "avg_length": 100.0, "min_length": 30, "max_length": 200, "count": 5, "missing": 0},
+                },
+            },
+        )
+
+        with patch("datasynth.mcp_server.DataSynthesizer") as MockSynth:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            content = await _call_tool(
+                server, "synthesize_data", {"analysis_dir": str(datarecipe_dir), "count": 5}
+            )
+
+        text = content[0].text
+        assert "合成完成" in text
+        assert "去重数量: 1" in text
+        assert "统计概要" in text
+        assert "instruction" in text
+        assert "平均长度" in text
+
+    @pytest.mark.asyncio
     async def test_synthesize_failure(self, server, datarecipe_dir):
         from datasynth.synthesizer import SynthesisResult
 
