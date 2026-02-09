@@ -16,7 +16,7 @@
 
 ---
 
-**GitHub Topics**: `synthetic-data`, `llm`, `data-generation`, `mcp`, `data-pipeline`
+**GitHub Topics**: `synthetic-data`, `data-generation`, `llm`, `mcp`, `ai-data-pipeline`
 
 基于少量种子数据和 Schema 定义，使用 LLM 批量生成高质量训练数据。支持 API 模式和交互模式。
 
