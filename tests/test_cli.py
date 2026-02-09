@@ -150,6 +150,95 @@ class TestGenerate:
         assert "生成成功" in result.output
         assert "生成数量: 10" in result.output
 
+    def test_generate_with_post_hook(self, runner, datarecipe_dir):
+        mock_result = SynthesisResult(
+            success=True,
+            output_path=str(datarecipe_dir / "out.json"),
+            generated_count=5,
+            failed_count=0,
+            total_tokens=1000,
+            estimated_cost=0.01,
+            duration_seconds=1.0,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth, patch(
+            "datasynth.cli.subprocess.run"
+        ) as mock_run:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            mock_run.return_value.returncode = 0
+            result = runner.invoke(
+                main,
+                [
+                    "generate",
+                    str(datarecipe_dir),
+                    "-n",
+                    "5",
+                    "--post-hook",
+                    "echo {analysis_dir} {output_path} {count}",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert "post-hook" in result.output
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert str(datarecipe_dir) in cmd
+        assert "5" in cmd
+
+    def test_generate_post_hook_failure(self, runner, datarecipe_dir):
+        mock_result = SynthesisResult(
+            success=True,
+            output_path="x",
+            generated_count=5,
+            failed_count=0,
+            total_tokens=100,
+            estimated_cost=0.01,
+            duration_seconds=0.5,
+        )
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth, patch(
+            "datasynth.cli.subprocess.run"
+        ) as mock_run:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            mock_run.return_value.returncode = 1
+            result = runner.invoke(
+                main,
+                [
+                    "generate",
+                    str(datarecipe_dir),
+                    "-n",
+                    "5",
+                    "--post-hook",
+                    "false",
+                ],
+            )
+
+        assert result.exit_code == 0  # generate itself succeeds
+        assert "post-hook 退出码: 1" in result.output
+
+    def test_generate_no_post_hook_on_failure(self, runner, datarecipe_dir):
+        """Post-hook should NOT run when generation fails."""
+        mock_result = SynthesisResult(success=False, error="fail")
+
+        with patch("datasynth.cli.DataSynthesizer") as MockSynth, patch(
+            "datasynth.cli.subprocess.run"
+        ) as mock_run:
+            MockSynth.return_value.synthesize_from_datarecipe.return_value = mock_result
+            result = runner.invoke(
+                main,
+                [
+                    "generate",
+                    str(datarecipe_dir),
+                    "-n",
+                    "5",
+                    "--post-hook",
+                    "echo should-not-run",
+                ],
+            )
+
+        assert result.exit_code == 1
+        mock_run.assert_not_called()
+
     def test_generate_failure(self, runner, datarecipe_dir):
         mock_result = SynthesisResult(success=False, error="API key not set")
 

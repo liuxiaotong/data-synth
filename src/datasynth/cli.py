@@ -1,6 +1,7 @@
 """DataSynth CLI - 命令行界面."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -51,6 +52,12 @@ def main():
     help="输出格式 (默认: json)",
 )
 @click.option("--dry-run", is_flag=True, help="仅估算成本，不实际生成")
+@click.option(
+    "--post-hook",
+    type=str,
+    default=None,
+    help="生成成功后执行的命令，支持 {analysis_dir} {output_path} {count} 变量",
+)
 def generate(
     analysis_dir: str,
     output: Optional[str],
@@ -63,6 +70,7 @@ def generate(
     retry_delay: float,
     output_format: str,
     dry_run: bool,
+    post_hook: Optional[str],
 ):
     """从 DataRecipe 分析结果生成合成数据
 
@@ -119,6 +127,18 @@ def generate(
         click.echo(f"  Token 用量: {result.total_tokens:,}")
         click.echo(f"  预计成本: ${result.estimated_cost:.4f}")
         click.echo(f"  耗时: {result.duration_seconds:.1f}s")
+
+        # Run post-hook
+        if post_hook:
+            cmd = post_hook.format(
+                analysis_dir=analysis_dir,
+                output_path=result.output_path,
+                count=result.generated_count,
+            )
+            click.echo(f"  执行 post-hook: {cmd}")
+            hook_result = subprocess.run(cmd, shell=True)
+            if hook_result.returncode != 0:
+                click.echo(f"  ⚠ post-hook 退出码: {hook_result.returncode}", err=True)
     else:
         click.echo(f"✗ 生成失败: {result.error}", err=True)
         sys.exit(1)
