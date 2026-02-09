@@ -1,13 +1,15 @@
 <div align="center">
 
-# DataSynth
+<h1>🧪 DataSynth</h1>
 
-**数据合成工具 — 基于种子数据批量生成高质量训练数据**
-**Seed-to-scale synthetic data engine for LLM training workflows**
+<p><strong>数据合成工具 — 基于种子数据批量生成高质量训练数据</strong><br/>
+<em>Seed-to-scale synthetic data engine for LLM training workflows</em></p>
 
 [![PyPI](https://img.shields.io/pypi/v/knowlyr-datasynth?color=blue)](https://pypi.org/project/knowlyr-datasynth/)
+[![Downloads](https://img.shields.io/pypi/dm/knowlyr-datasynth?color=green)](https://pypi.org/project/knowlyr-datasynth/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<br/>
 [![CI](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml)
 [![MCP](https://img.shields.io/badge/MCP-5_Tools-purple.svg)](#mcp-server)
 
@@ -17,11 +19,12 @@
 
 ---
 
-**GitHub Topics**: `synthetic-data`, `data-generation`, `llm`, `mcp`, `ai-data-pipeline`
+> 🎯 **智能模板** 自动检测数据类型（指令-回复 / 偏好对 / 多轮对话），选用专用 Prompt
+> ⚡ **并发生成** 多批次并行调用 LLM，增量续跑，断点恢复不浪费
+> 💰 **精确成本** 按模型实际定价计算（Claude / GPT 全系列），`--dry-run` 先估再生
+> 🔄 **质量闭环** Schema 验证 + 去重 + 后置钩子自动触发质检
 
-基于少量种子数据和 Schema 定义，使用 LLM 批量生成高质量训练数据。支持 API 模式和交互模式。
-
-## 核心能力 / Core Capabilities
+## 核心能力
 
 ```
 Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质检筛选
@@ -37,7 +40,7 @@ Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质
 - **精确成本** — 按模型实际定价计算 (Claude / GPT 全系列)
 - **后置钩子** — 生成完成后自动触发质检等下游命令
 
-### 输入 / 输出示例 / Input & Output Samples
+### 输入 / 输出示例
 
 ```jsonc
 // seed.json
@@ -56,7 +59,7 @@ Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质
 [{"instruction": "给出反事实...", "response": "...", "quality": 4 }]
 ```
 
-### 解决的问题 / Problems Solved
+### 解决的问题
 
 | 痛点 | 传统方案 | DataSynth |
 |------|----------|-----------|
@@ -65,20 +68,21 @@ Schema + 种子数据 (50条) → LLM 合成 → 批量数据 (1000+条) → 质
 | **规模** | 需要招人、培训 | 按需弹性生成 |
 | **一致性** | 标注员理解差异 | 规则 + 模板保证一致 |
 
-### 工作模式 / Modes
+### 工作模式
 
 | 模式 | 说明 | 适用场景 |
 |------|------|----------|
 | **API 模式** | 直接调用 LLM API | 有 API key，批量生成 |
 | **交互模式** | 生成 Prompt，手动调用 | Claude Code 中使用，无需 API key |
 
-## 安装 / Installation
+## 安装
 
 ```bash
 pip install knowlyr-datasynth
 ```
 
-可选依赖：
+<details>
+<summary>📦 可选依赖</summary>
 
 ```bash
 pip install knowlyr-datasynth[anthropic]  # Anthropic Claude
@@ -88,9 +92,11 @@ pip install knowlyr-datasynth[mcp]        # MCP 服务器
 pip install knowlyr-datasynth[all]        # 全部功能
 ```
 
-## 快速开始 / Quick Start
+</details>
 
-### API 模式 (需要 API key) / API Mode
+## 快速开始
+
+### API 模式 (需要 API key)
 
 ```bash
 # 设置 API key
@@ -125,7 +131,7 @@ knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 1000 --dry-run
 
 </details>
 
-### 交互模式 (无需 API key) / Interactive Mode
+### 交互模式 (无需 API key)
 
 ```bash
 # 生成 Prompt
@@ -138,9 +144,9 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 
 ---
 
-## 高级功能 / Advanced Features
+## 高级功能
 
-### 增量续跑 / Resume
+### 增量续跑
 
 中断后从已有输出继续生成，不会重复已有数据：
 
@@ -152,7 +158,7 @@ knowlyr-datasynth generate ./output/my_dataset/ -n 500
 knowlyr-datasynth generate ./output/my_dataset/ -n 500 --resume
 ```
 
-### 数据类型自动检测 / Auto Data Type
+### 数据类型自动检测
 
 根据 Schema 字段名自动选择最佳 Prompt 模板：
 
@@ -164,7 +170,7 @@ knowlyr-datasynth generate ./output/my_dataset/ -n 500 --resume
 
 也可手动指定：`--data-type preference`
 
-### Schema 验证 / Validation
+### Schema 验证
 
 生成的数据自动校验，不合规样本被过滤：
 
@@ -179,14 +185,14 @@ knowlyr-datasynth generate ./output/my_dataset/ -n 500 --resume
 
 使用 `--no-validate` 或 `validate=False` 跳过验证和去重。
 
-### 并发生成 / Concurrency
+### 并发生成
 
 ```bash
 # 3 个批次并行，加速生成
 knowlyr-datasynth generate ./output/my_dataset/ -n 1000 --concurrency 3
 ```
 
-### 失败重试策略 / Retry Strategy
+### 失败重试策略
 
 ```bash
 knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
@@ -196,7 +202,7 @@ knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
 - `--retry-delay`：重试间隔秒数
 - `--temperature`：重试时自动递增 0.05，提高结果多样性
 
-### 后置钩子 / Post Hook
+### 后置钩子
 
 生成完成后自动触发下游命令：
 
@@ -207,7 +213,7 @@ knowlyr-datasynth generate ./output/my_dataset/ -n 1000 \
 
 支持变量: `{analysis_dir}` `{output_path}` `{count}`
 
-### 统计报告 / Stats Report
+### 统计报告
 
 生成后输出字段分布统计：
 
@@ -228,7 +234,10 @@ knowlyr-datasynth generate ./output/my_dataset/ -n 1000 --stats
 }
 ```
 
-### 模型定价 / Model Pricing
+<details>
+<summary>💰 模型定价</summary>
+
+### 模型定价
 
 成本估算自动匹配模型实际定价：
 
@@ -240,7 +249,12 @@ knowlyr-datasynth generate ./output/my_dataset/ -n 1000 --stats
 | GPT-4o | $0.0025 | $0.01 |
 | GPT-4o Mini | $0.00015 | $0.0006 |
 
-### 配置文件 / Config File
+</details>
+
+<details>
+<summary>⚙️ 配置文件</summary>
+
+### 配置文件
 
 避免重复输入 CLI 参数，使用 JSON 配置文件：
 
@@ -268,11 +282,13 @@ knowlyr-datasynth generate ./output/my_dataset/ --config config.json -m gpt-4o
 }
 ```
 
+</details>
+
 ---
 
-## 验证与初始化 / Validate & Init
+## 验证与初始化
 
-### 数据验证 / Validate
+### 数据验证
 
 验证已有数据文件是否符合 Schema：
 
@@ -297,7 +313,7 @@ knowlyr-datasynth validate data.json schema.json
 
 支持 JSON 和 JSONL 格式，以及 `{samples: [{data: ...}]}` 结构。
 
-### 项目初始化 / Init
+### 项目初始化
 
 快速创建配置和 Schema 模板：
 
@@ -310,7 +326,7 @@ knowlyr-datasynth init -o my_project/
 - `schema.json` — 数据 Schema
 - `seeds.json` — 种子数据示例
 
-### 格式转换 / Convert
+### 格式转换
 
 JSON 和 JSONL 互转：
 
@@ -326,7 +342,7 @@ knowlyr-datasynth convert data.jsonl -o data.json
 
 ---
 
-## 成本估算 / Costing
+## 成本估算
 
 ```bash
 knowlyr-datasynth estimate -n 1000
@@ -342,7 +358,7 @@ knowlyr-datasynth estimate -n 1000
   模型: claude-sonnet-4-20250514
 ```
 
-### 不同规模的成本参考 / Scale Reference
+### 不同规模的成本参考
 
 | 数量 | 预计成本 | 预计时间 |
 |------|----------|----------|
@@ -350,7 +366,7 @@ knowlyr-datasynth estimate -n 1000
 | 1,000 | ~$10 | ~10 分钟 |
 | 10,000 | ~$100 | ~2 小时 |
 
-### 质量闭环 / Quality Loop
+### 质量闭环
 
 ```
 DataRecipe 输出 (Schema + Rubric)
@@ -364,7 +380,7 @@ DataCheck 质检 + 回写报告
 
 ---
 
-## 交互模式 / Interactive Workflow
+## 交互模式
 
 交互模式适合在 Claude Code 中使用，不需要 API key：
 
@@ -384,11 +400,14 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 
 ---
 
-## MCP Server / Claude Integration
+## MCP Server
 
 在 Claude Desktop / Claude Code 中直接使用。
 
-### 配置 / Config
+<details>
+<summary>⚙️ 配置</summary>
+
+### 配置
 
 添加到 `~/Library/Application Support/Claude/claude_desktop_config.json`：
 
@@ -403,7 +422,9 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 }
 ```
 
-### 可用工具 / Tools
+</details>
+
+### 可用工具
 
 | 工具 | 功能 |
 |------|------|
@@ -413,7 +434,7 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 | `validate_data` | 验证数据文件是否符合 Schema |
 | `estimate_synthesis_cost` | 估算生成成本 |
 
-### 使用示例 (交互模式) / Usage Example
+### 使用示例 (交互模式)
 
 ```
 用户: 帮我基于 ./output/SVGEditBench 生成 20 条合成数据
@@ -431,9 +452,12 @@ Claude: [调用 prepare_synthesis]
 
 ---
 
-## Data Pipeline 生态 / Ecosystem
+## Data Pipeline 生态
 
 DataSynth 是 Data Pipeline 生态的合成组件：
+
+<details>
+<summary>🗺️ 生态架构图</summary>
 
 ```mermaid
 graph LR
@@ -450,6 +474,8 @@ graph LR
     style Synth fill:#0969da,color:#fff,stroke:#0969da
 ```
 
+</details>
+
 ### 生态项目
 
 | 层 | 项目 | PyPI 包 | 说明 | 仓库 |
@@ -462,7 +488,7 @@ graph LR
 | 质检 | **ModelAudit** | knowlyr-modelaudit | 蒸馏检测、模型指纹、身份验证 | [GitHub](https://github.com/liuxiaotong/model-audit) |
 | Agent | **knowlyr-agent** | knowlyr-sandbox / recorder / reward / hub | 沙箱 + 轨迹录制 + Reward + 编排 | [GitHub](https://github.com/liuxiaotong/knowlyr-agent) |
 
-### 端到端工作流 / End-to-end Flow
+### 端到端工作流
 
 ```bash
 # 1. DataRecipe: 分析数据集，生成 Schema 和样例
@@ -478,7 +504,10 @@ knowlyr-datasynth generate ./output/tencent_CL-bench/ -n 1000 --concurrency 3
 knowlyr-datacheck validate ./output/tencent_CL-bench/
 ```
 
-### 四合一 MCP 配置 / Quad MCP Config
+<details>
+<summary>🔌 四合一 MCP 配置</summary>
+
+### 四合一 MCP 配置
 
 ```json
 {
@@ -503,9 +532,12 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 }
 ```
 
+</details>
+
 ---
 
-## 命令参考
+<details>
+<summary>📖 命令参考</summary>
 
 | 命令 | 功能 |
 |------|------|
@@ -543,7 +575,12 @@ knowlyr-datacheck validate ./output/tencent_CL-bench/
 | `--config` | JSON 配置文件 (CLI 参数优先) | — |
 | `--dry-run` | 仅估算成本，不生成 (显示 Schema 信息) | — |
 
+</details>
+
 ---
+
+<details>
+<summary>🐍 Python API</summary>
 
 ## API 使用
 
@@ -579,7 +616,12 @@ if result.stats:
         print(f"  {field}: {info}")
 ```
 
+</details>
+
 ---
+
+<details>
+<summary>🏗️ 项目架构</summary>
 
 ## 项目架构
 
@@ -593,6 +635,26 @@ src/datasynth/
 ├── cli.py            # CLI 命令行 (Click)
 └── mcp_server.py     # MCP Server (5 工具)
 ```
+
+</details>
+
+---
+
+## 开发
+
+```bash
+# 安装开发依赖
+pip install -e ".[all,dev]"
+
+# 运行测试
+pytest
+
+# 代码格式化 + lint
+ruff check src/
+ruff format src/
+```
+
+**CI**: GitHub Actions，支持 Python 3.10+。Tag push 自动发布 PyPI + GitHub Release。
 
 ---
 
