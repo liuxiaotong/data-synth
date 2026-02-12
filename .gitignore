@@ -17,6 +17,7 @@ ENV/
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 
@@ -35,6 +36,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.envrc
 
 # ===================
 # Supplemented common patterns
