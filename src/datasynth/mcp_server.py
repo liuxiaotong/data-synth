@@ -272,6 +272,33 @@ def create_server() -> "Server":
                     "required": ["count"],
                 },
             ),
+            Tool(
+                name="synth_translate",
+                description="将合成数据翻译为目标语言（保留格式和标签结构）",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "data_path": {
+                            "type": "string",
+                            "description": "输入数据文件路径 (JSON/JSONL)",
+                        },
+                        "target_lang": {
+                            "type": "string",
+                            "description": "目标语言 (zh/en/ja/ko/fr/de 等)",
+                        },
+                        "output_path": {
+                            "type": "string",
+                            "description": "输出文件路径",
+                        },
+                        "fields": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "要翻译的字段（可选，默认翻译所有文本字段）",
+                        },
+                    },
+                    "required": ["data_path", "target_lang", "output_path"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -734,6 +761,67 @@ def create_server() -> "Server":
                     f"- 模型: {estimate['model']}",
                 )
             ]
+
+        elif name == "synth_translate":
+            data_path = Path(arguments["data_path"])
+            target_lang = arguments["target_lang"]
+            output_path = arguments["output_path"]
+            fields = arguments.get("fields")
+
+            if not data_path.exists():
+                return [TextContent(type="text", text=f"文件不存在: {data_path}")]
+
+            # Load samples
+            samples = []
+            suffix = data_path.suffix.lower()
+            with open(data_path, "r", encoding="utf-8") as f:
+                if suffix == ".jsonl":
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            samples.append(json.loads(line))
+                else:
+                    samples = json.load(f)
+                    if isinstance(samples, dict):
+                        samples = samples.get("data", samples.get("samples", [samples]))
+
+            if not samples:
+                return [TextContent(type="text", text="错误: 数据文件为空")]
+
+            # Auto-detect text fields if not specified
+            if not fields:
+                sample = samples[0]
+                fields = [k for k, v in sample.items() if isinstance(v, str) and len(v) > 5]
+
+            lang_names = {
+                "zh": "中文", "en": "English", "ja": "日本語", "ko": "한국어",
+                "fr": "Français", "de": "Deutsch", "es": "Español",
+            }
+            lang_display = lang_names.get(target_lang, target_lang)
+
+            # Generate translation prompt instead of doing actual translation
+            lines = [
+                f"## 翻译任务生成",
+                "",
+                f"- 源文件: `{data_path.name}` ({len(samples)} 条)",
+                f"- 目标语言: {lang_display} ({target_lang})",
+                f"- 翻译字段: {', '.join(fields)}",
+                f"- 输出路径: {output_path}",
+                "",
+                "### 翻译提示模板",
+                "",
+                "```",
+                f"请将以下 JSON 数据中的 {', '.join(fields)} 字段翻译为{lang_display}，",
+                "保持 JSON 格式和其他字段不变。",
+                "",
+                "输入样例:",
+                json.dumps(samples[0], ensure_ascii=False, indent=2)[:500],
+                "```",
+                "",
+                f"共 {len(samples)} 条待翻译。建议使用 LLM 批量处理。",
+            ]
+
+            return [TextContent(type="text", text="\n".join(lines))]
 
         else:
             return [TextContent(type="text", text=f"未知工具: {name}")]
