@@ -140,6 +140,121 @@ def create_server() -> "Server":
                 },
             ),
             Tool(
+                name="synth_augment",
+                description="对已有数据做变体扩增（改写/回译/扰动/风格迁移）",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "data_path": {
+                            "type": "string",
+                            "description": "源数据文件路径 (JSON / JSONL)",
+                        },
+                        "output_path": {
+                            "type": "string",
+                            "description": "输出文件路径",
+                        },
+                        "strategy": {
+                            "type": "string",
+                            "enum": ["paraphrase", "backtranslate", "perturb", "style_transfer", "all"],
+                            "description": "扩增策略 (默认: paraphrase)",
+                            "default": "paraphrase",
+                        },
+                        "multiplier": {
+                            "type": "integer",
+                            "description": "每条数据生成的变体数量 (默认: 3)",
+                            "default": 3,
+                        },
+                        "fields": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "要扩增的文本字段名列表（默认自动检测）",
+                        },
+                        "preserve_labels": {
+                            "type": "boolean",
+                            "description": "保持标签/分类不变 (默认: true)",
+                            "default": True,
+                        },
+                    },
+                    "required": ["data_path", "output_path"],
+                },
+            ),
+            Tool(
+                name="synth_batch",
+                description="批量合成数据（支持进度追踪和断点续传）",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "analysis_dir": {
+                            "type": "string",
+                            "description": "DataRecipe 分析输出目录",
+                        },
+                        "output_dir": {
+                            "type": "string",
+                            "description": "批量输出目录",
+                        },
+                        "total_count": {
+                            "type": "integer",
+                            "description": "总目标数量",
+                        },
+                        "batch_size": {
+                            "type": "integer",
+                            "description": "每批数量 (默认: 50)",
+                            "default": 50,
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "LLM 模型 (默认: claude-sonnet-4-20250514)",
+                        },
+                        "provider": {
+                            "type": "string",
+                            "enum": ["anthropic", "openai"],
+                            "description": "LLM 提供商",
+                        },
+                        "resume": {
+                            "type": "boolean",
+                            "description": "从已有进度续传 (默认: true)",
+                            "default": True,
+                        },
+                    },
+                    "required": ["analysis_dir", "output_dir", "total_count"],
+                },
+            ),
+            Tool(
+                name="synth_evaluate",
+                description="对合成数据做多维度快检（多样性/忠实度/质量分布）",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "data_path": {
+                            "type": "string",
+                            "description": "合成数据文件路径 (JSON / JSONL)",
+                        },
+                        "schema_path": {
+                            "type": "string",
+                            "description": "Schema 文件路径（可选，有则验证合规性）",
+                        },
+                        "seed_path": {
+                            "type": "string",
+                            "description": "种子数据路径（可选，有则计算与种子的相似度）",
+                        },
+                        "metrics": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": ["diversity", "faithfulness", "quality", "dedup", "length_distribution", "all"],
+                            },
+                            "description": "评估维度 (默认: all)",
+                        },
+                        "sample_size": {
+                            "type": "integer",
+                            "description": "抽样评估数量（0=全量，默认: 200）",
+                            "default": 200,
+                        },
+                    },
+                    "required": ["data_path"],
+                },
+            ),
+            Tool(
                 name="estimate_synthesis_cost",
                 description="估算合成成本",
                 inputSchema={
@@ -343,6 +458,261 @@ def create_server() -> "Server":
                     lines.append(f"  #{idx}: {'; '.join(errs)}")
                 if len(errors) > 5:
                     lines.append(f"  ... 共 {len(errors)} 条错误")
+
+            return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "synth_augment":
+            data_path = Path(arguments["data_path"])
+            output_path = Path(arguments["output_path"])
+            strategy = arguments.get("strategy", "paraphrase")
+            multiplier = arguments.get("multiplier", 3)
+            fields = arguments.get("fields")
+            preserve_labels = arguments.get("preserve_labels", True)
+
+            if not data_path.exists():
+                return [TextContent(type="text", text=f"数据文件未找到: {data_path}")]
+
+            # Load source data
+            samples: list = []
+            with open(data_path, "r", encoding="utf-8") as f:
+                if data_path.suffix == ".jsonl":
+                    for line in f:
+                        if line.strip():
+                            samples.append(json.loads(line))
+                else:
+                    data = json.load(f)
+                    samples = data if isinstance(data, list) else data.get("samples", [])
+
+            if not samples:
+                return [TextContent(type="text", text="源数据为空")]
+
+            # Auto-detect text fields if not specified
+            if not fields:
+                fields = []
+                sample = samples[0]
+                for k, v in (sample.get("data", sample) if isinstance(sample, dict) else {}).items():
+                    if isinstance(v, str) and len(v) > 20:
+                        fields.append(k)
+                if not fields:
+                    fields = [k for k, v in (samples[0] if isinstance(samples[0], dict) else {}).items()
+                             if isinstance(v, str) and len(v) > 20]
+
+            # Build augmentation prompt
+            strategy_desc = {
+                "paraphrase": "改写：保持语义不变，换一种表达方式",
+                "backtranslate": "回译：模拟翻译为其他语言后再翻回中文的效果",
+                "perturb": "扰动：在细节上做小幅修改（数字、名称、顺序等）",
+                "style_transfer": "风格迁移：改变语气（正式↔口语、简洁↔详细等）",
+                "all": "综合使用以上所有策略",
+            }
+            prompt_lines = [
+                "## 数据扩增 Prompt",
+                "",
+                f"策略: {strategy_desc.get(strategy, strategy)}",
+                f"目标: 每条数据生成 {multiplier} 个变体",
+                f"扩增字段: {', '.join(fields)}",
+                f"保持标签不变: {'是' if preserve_labels else '否'}",
+                f"源数据量: {len(samples)} 条",
+                f"预计输出: {len(samples) * multiplier} 条变体",
+                "",
+                "---",
+                "",
+                f"请对以下 {min(3, len(samples))} 条样例数据的 `{', '.join(fields)}` 字段",
+                f"各生成 {multiplier} 个变体。使用 JSON 数组输出，每个变体保留原始所有字段。",
+                "",
+                "样例数据:",
+                "```json",
+                json.dumps(samples[:3], ensure_ascii=False, indent=2),
+                "```",
+                "",
+                f"输出路径: {output_path}",
+            ]
+
+            return [TextContent(type="text", text="\n".join(prompt_lines))]
+
+        elif name == "synth_batch":
+            analysis_dir = Path(arguments["analysis_dir"])
+            output_dir = Path(arguments["output_dir"])
+            total_count = arguments["total_count"]
+            batch_size = arguments.get("batch_size", 50)
+            resume = arguments.get("resume", True)
+
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Check existing progress
+            existing = 0
+            existing_files: list[str] = []
+            if resume:
+                for f in sorted(output_dir.glob("batch_*.jsonl")):
+                    with open(f, "r", encoding="utf-8") as fh:
+                        count = sum(1 for line in fh if line.strip())
+                    existing += count
+                    existing_files.append(f"{f.name}: {count} 条")
+
+            remaining = max(0, total_count - existing)
+            batches_needed = (remaining + batch_size - 1) // batch_size if remaining > 0 else 0
+
+            config = SynthesisConfig(
+                target_count=batch_size,
+                model=arguments.get("model", "claude-sonnet-4-20250514"),
+                provider=arguments.get("provider", "anthropic"),
+            )
+            cost_per_batch = config.estimate_cost()
+
+            lines = [
+                "## 批量合成计划",
+                "",
+                f"- 总目标: {total_count} 条",
+                f"- 已有进度: {existing} 条" + (f"（{len(existing_files)} 个文件）" if existing_files else ""),
+                f"- 剩余: {remaining} 条",
+                f"- 批大小: {batch_size}",
+                f"- 待执行批次: {batches_needed}",
+                f"- 预计成本: ${cost_per_batch['estimated_cost_usd'] * batches_needed:.2f}",
+                f"- 输出目录: {output_dir}",
+            ]
+
+            if remaining > 0:
+                lines.extend([
+                    "",
+                    "执行方式: 逐批调用 `synthesize_data` 工具，每批指定:",
+                    f"  analysis_dir={analysis_dir}",
+                    f"  output_path={output_dir}/batch_{{N:03d}}.jsonl",
+                    f"  count={batch_size}",
+                    "  format=jsonl",
+                    f"  resume={resume}",
+                ])
+
+                if existing_files:
+                    lines.extend(["", "已有文件:"])
+                    for ef in existing_files[:10]:
+                        lines.append(f"  - {ef}")
+                    if len(existing_files) > 10:
+                        lines.append(f"  ... 共 {len(existing_files)} 个文件")
+            else:
+                lines.append("\n已达目标，无需继续合成。")
+
+            return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "synth_evaluate":
+            data_path = Path(arguments["data_path"])
+            if not data_path.exists():
+                return [TextContent(type="text", text=f"数据文件未找到: {data_path}")]
+
+            # Load data
+            samples: list = []
+            with open(data_path, "r", encoding="utf-8") as f:
+                if data_path.suffix == ".jsonl":
+                    for line in f:
+                        if line.strip():
+                            samples.append(json.loads(line))
+                else:
+                    data = json.load(f)
+                    samples = data if isinstance(data, list) else data.get("samples", [])
+
+            if not samples:
+                return [TextContent(type="text", text="数据文件为空")]
+
+            metrics = arguments.get("metrics", ["all"])
+            if "all" in metrics:
+                metrics = ["diversity", "faithfulness", "quality", "dedup", "length_distribution"]
+
+            sample_size = arguments.get("sample_size", 200)
+            import random
+            eval_samples = random.sample(samples, min(sample_size, len(samples))) if sample_size and sample_size < len(samples) else samples
+
+            lines = [f"## 合成数据评估报告", "", f"文件: {data_path}", f"总量: {len(samples)} 条", f"评估样本: {len(eval_samples)} 条", ""]
+
+            # Detect text fields
+            text_fields: list[str] = []
+            if eval_samples and isinstance(eval_samples[0], dict):
+                for k, v in eval_samples[0].items():
+                    if isinstance(v, str) and len(v) > 10:
+                        text_fields.append(k)
+
+            if "length_distribution" in metrics and text_fields:
+                lines.append("### 长度分布")
+                for field in text_fields:
+                    lengths = [len(s.get(field, "")) for s in eval_samples if isinstance(s.get(field), str)]
+                    if lengths:
+                        avg_len = sum(lengths) / len(lengths)
+                        min_len = min(lengths)
+                        max_len = max(lengths)
+                        lines.append(f"- **{field}**: 平均 {avg_len:.0f} 字, 范围 [{min_len}, {max_len}]")
+                lines.append("")
+
+            if "dedup" in metrics:
+                lines.append("### 去重分析")
+                # Simple dedup by first text field
+                if text_fields:
+                    field = text_fields[0]
+                    texts = [s.get(field, "") for s in eval_samples if isinstance(s.get(field), str)]
+                    unique = len(set(texts))
+                    dup_rate = 1 - unique / len(texts) if texts else 0
+                    lines.append(f"- 基于 `{field}` 字段: {unique}/{len(texts)} 唯一 (重复率 {dup_rate:.1%})")
+                # Hash-based exact dedup
+                hashes = set()
+                exact_dups = 0
+                for s in eval_samples:
+                    h = hash(json.dumps(s, sort_keys=True, ensure_ascii=False))
+                    if h in hashes:
+                        exact_dups += 1
+                    hashes.add(h)
+                lines.append(f"- 完全相同记录: {exact_dups}/{len(eval_samples)}")
+                lines.append("")
+
+            if "diversity" in metrics and text_fields:
+                lines.append("### 多样性")
+                field = text_fields[0]
+                texts = [s.get(field, "") for s in eval_samples if isinstance(s.get(field), str)]
+                if texts:
+                    # Vocabulary diversity
+                    all_chars = set()
+                    all_words: set[str] = set()
+                    for t in texts:
+                        all_chars.update(t)
+                        all_words.update(t.split())
+                    lines.append(f"- 基于 `{field}` 字段:")
+                    lines.append(f"  - 唯一字符数: {len(all_chars)}")
+                    lines.append(f"  - 唯一词汇数: {len(all_words)}")
+                    # Starting pattern diversity
+                    starts = set(t[:20] for t in texts if len(t) >= 20)
+                    lines.append(f"  - 开头模式多样性: {len(starts)}/{len(texts)} ({len(starts)/len(texts):.1%})")
+                lines.append("")
+
+            if "quality" in metrics:
+                lines.append("### 质量检查")
+                # Basic quality metrics
+                empty_count = sum(1 for s in eval_samples if not s or (isinstance(s, dict) and not any(s.values())))
+                lines.append(f"- 空记录: {empty_count}/{len(eval_samples)}")
+                if text_fields:
+                    for field in text_fields[:3]:
+                        short = sum(1 for s in eval_samples if isinstance(s.get(field), str) and len(s[field]) < 10)
+                        lines.append(f"- `{field}` 过短 (<10字): {short}/{len(eval_samples)}")
+                lines.append("")
+
+            if "faithfulness" in metrics:
+                schema_path = arguments.get("schema_path")
+                seed_path = arguments.get("seed_path")
+                lines.append("### 忠实度")
+                if schema_path and Path(schema_path).exists():
+                    from datasynth.config import DataSchema
+                    with open(schema_path, "r", encoding="utf-8") as f:
+                        schema = DataSchema.from_dict(json.load(f))
+                    errors = 0
+                    for s in eval_samples:
+                        if schema.validate_sample(s):
+                            errors += 1
+                    lines.append(f"- Schema 合规率: {(len(eval_samples) - errors)}/{len(eval_samples)} ({(1 - errors/len(eval_samples)):.1%})")
+                else:
+                    lines.append("- Schema 合规率: 未提供 schema_path，跳过")
+                if seed_path and Path(seed_path).exists():
+                    lines.append("- 种子相似度: 需要 embedding 计算，建议使用专用工具")
+                else:
+                    lines.append("- 种子相似度: 未提供 seed_path，跳过")
+                lines.append("")
+
+            lines.append("---")
+            lines.append(f"评估维度: {', '.join(metrics)}")
 
             return [TextContent(type="text", text="\n".join(lines))]
 
