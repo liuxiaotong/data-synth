@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 <br/>
 [![CI](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml)
-[![MCP](https://img.shields.io/badge/MCP-5_Tools-purple.svg)](#mcp-server)
+[![MCP](https://img.shields.io/badge/MCP-9_Tools-purple.svg)](#mcp-server)
 
 [快速开始](#快速开始) · [高级功能](#高级功能) · [交互模式](#交互模式) · [MCP Server](#mcp-server) · [验证与初始化](#验证与初始化) · [生态](#data-pipeline-生态)
 
@@ -433,6 +433,10 @@ knowlyr-datasynth prepare ./analysis_output/my_dataset/ -n 10
 | `synthesize_data` | 直接调用 LLM 生成（支持 resume / data_type / format） |
 | `validate_data` | 验证数据文件是否符合 Schema |
 | `estimate_synthesis_cost` | 估算生成成本 |
+| `synth_augment` | 数据增强（回译/同义替换/噪声注入/风格迁移） |
+| `synth_batch` | 批量合成（多种子×多变体，支持续写） |
+| `synth_evaluate` | 评估合成数据质量（多样性/忠实度/自然度） |
+| `synth_translate` | 生成翻译任务 Prompt（自动检测文本字段） |
 
 ### 使用示例 (交互模式)
 
@@ -642,7 +646,7 @@ src/datasynth/
 ├── prompts.py        # Prompt 模板 (通用 + 专用) 和解析
 ├── config.py         # 配置、Schema 定义、验证
 ├── cli.py            # CLI 命令行 (Click)
-└── mcp_server.py     # MCP Server (5 工具)
+└── mcp_server.py     # MCP Server (9 工具)
 ```
 
 </details>
