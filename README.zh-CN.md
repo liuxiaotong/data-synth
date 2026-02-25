@@ -1,14 +1,17 @@
+<div align="right">
+
+[English](README.md) | **中文**
+
+</div>
+
 <div align="center">
-
-> **English** | [中文](README.zh-CN.md)
-
 
 <h1>DataSynth</h1>
 
-<h3>LLM-Powered Synthetic Dataset Generation<br/>with Quality-Diversity Optimization</h3>
+<h3>LLM 驱动的合成数据生成引擎<br/>LLM-Powered Synthetic Dataset Generation</h3>
 
-<p><strong>LLM 驱动的合成数据生成引擎 — 智能模板 · 并发生成 · Schema 验证 · 成本精算</strong><br/>
-<em>Seed-to-scale synthetic data engine with auto-detected templates, concurrent generation, schema validation, and precise cost estimation</em></p>
+<p><strong>智能模板 · 并发生成 · Schema 验证 · 成本精算</strong><br/>
+<em>种子驱动的合成数据引擎——自动模板检测、并发生成、Schema 验证、精确成本估算</em></p>
 
 [![PyPI](https://img.shields.io/pypi/v/knowlyr-datasynth?color=blue)](https://pypi.org/project/knowlyr-datasynth/)
 [![Downloads](https://img.shields.io/pypi/dm/knowlyr-datasynth?color=green)](https://pypi.org/project/knowlyr-datasynth/)
@@ -16,17 +19,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 <br/>
 [![CI](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/liuxiaotong/data-synth/actions/workflows/ci.yml)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-9-purple.svg)](#mcp-server)
-[![Data Types](https://img.shields.io/badge/Data_Types-3_auto--detected-orange.svg)](#key-innovations)
-[![Providers](https://img.shields.io/badge/Providers-Anthropic%20·%20OpenAI-red.svg)](#key-innovations)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-9-purple.svg)](#mcp-服务器-mcp-server)
+[![Data Types](https://img.shields.io/badge/Data_Types-3_auto--detected-orange.svg)](#核心创新-key-innovations)
+[![Providers](https://img.shields.io/badge/Providers-Anthropic%20·%20OpenAI-red.svg)](#核心创新-key-innovations)
 
-[Abstract](#abstract) · [Problem Statement](#problem-statement) · [Formal Framework](#formal-framework) · [Architecture](#architecture) · [Key Innovations](#key-innovations) · [Quick Start](#quick-start) · [MCP Server](#mcp-server) · [Ecosystem](#ecosystem) · [References](#references)
+[摘要](#摘要-abstract) · [问题陈述](#问题陈述-problem-statement) · [形式化框架](#形式化框架-formal-framework) · [架构](#架构-architecture) · [核心创新](#核心创新-key-innovations) · [快速开始](#快速开始-quick-start) · [MCP 服务器](#mcp-服务器-mcp-server) · [生态系统](#生态系统-ecosystem) · [参考文献](#参考文献-references)
 
 </div>
 
 ---
 
-## Abstract
+## 摘要 / Abstract
 
 高质量训练数据是 LLM 性能的关键瓶颈。人工标注成本高（$0.1–$10/条）、速度慢（100 条/天）、一致性差（标注员理解差异），而简单的 LLM 批量调用又缺少质量保证——重复样本、违反 Schema 约束、分布偏斜等问题无法自动检测。
 
@@ -36,7 +39,7 @@ DataSynth 提出**种子驱动的合成数据生成框架** (seed-driven synthet
 
 ---
 
-## Problem Statement
+## 问题陈述 / Problem Statement
 
 合成数据生产面临三个根本性挑战：
 
@@ -50,9 +53,9 @@ DataSynth 提出**种子驱动的合成数据生成框架** (seed-driven synthet
 
 ---
 
-## Formal Framework
+## 形式化框架 / Formal Framework
 
-### Generation Model
+### 生成模型 / Generation Model
 
 合成数据生成形式化为映射函数：
 
@@ -60,7 +63,7 @@ $$G: (\mathcal{S}, \mathcal{T}, \theta) \to D'$$
 
 其中 $\mathcal{S} = \{s_1, \ldots, s_k\}$ 为种子数据集（$k \approx 50$），$\mathcal{T}$ 为模板函数（由数据类型自动选择），$\theta = (\text{model}, \text{temperature}, \text{max\_tokens})$ 为生成参数，$D'$ 为合成数据集。
 
-### Quality-Diversity Trade-off
+### 质量-多样性权衡 / Quality-Diversity Trade-off
 
 合成数据需要同时满足质量和多样性：
 
@@ -72,13 +75,13 @@ $$\max_\theta \;\mathbb{E}_{d \sim D'}[Q(d)] \quad \text{s.t.} \quad H(D') \geq 
 
 **温度递增**确保多样性：重试时 $\theta_{\text{temp}} \leftarrow \theta_{\text{temp}} + 0.05$，逐步增加生成多样性。
 
-### Deduplication
+### 去重 / Deduplication
 
 精确匹配去重（种子集 + 跨批次），避免重复数据稀释多样性：
 
 $$D'_{\text{final}} = \{d \in D' : d \notin \mathcal{S} \;\land\; \forall d' \in D'_{\text{prev}}, d \neq d'\}$$
 
-### Cost Model
+### 成本模型 / Cost Model
 
 精确成本估算基于模型实际定价：
 
@@ -88,17 +91,17 @@ $$\text{Cost}(D') = \sum_{d \in D'} (t_{\text{in}}(d) \cdot p_{\text{in}} + t_{\
 
 ---
 
-## Architecture
+## 架构 / Architecture
 
 ```mermaid
 graph LR
-    Seed["Seed Data<br/>(~50 samples)"] --> Detect["Type Detector<br/>Auto-detect"]
-    Detect --> Template["Template<br/>Specialized Prompt"]
-    Template --> Gen["Generator<br/>Concurrent Batches"]
-    Gen --> Val["Validator<br/>Schema Constraints"]
-    Val --> Dedup["Deduplicator<br/>Seed + Cross-batch"]
-    Dedup --> Stats["Statistics<br/>Distribution Report"]
-    Stats --> Hook["Post Hook<br/>(Optional)"]
+    Seed["种子数据<br/>(~50 条样本)"] --> Detect["类型检测器<br/>自动检测"]
+    Detect --> Template["模板<br/>专用 Prompt"]
+    Template --> Gen["生成器<br/>并发批量"]
+    Gen --> Val["验证器<br/>Schema 约束"]
+    Val --> Dedup["去重器<br/>种子集 + 跨批次"]
+    Dedup --> Stats["统计<br/>分布报告"]
+    Stats --> Hook["后置钩子<br/>（可选）"]
 
     style Gen fill:#0969da,color:#fff,stroke:#0969da
     style Val fill:#8b5cf6,color:#fff,stroke:#8b5cf6
@@ -112,9 +115,9 @@ graph LR
 
 ---
 
-## Key Innovations
+## 核心创新 / Key Innovations
 
-### 1. Auto-Detected Data Type Templates
+### 1. 自动数据类型模板 / Auto-Detected Data Type Templates
 
 根据 Schema 字段名自动检测数据类型，选用专用 Prompt 模板：
 
@@ -126,7 +129,7 @@ graph LR
 
 也可手动指定：`--data-type preference`
 
-### 2. Concurrent Generation with Incremental Resume
+### 2. 并发生成与增量续跑 / Concurrent Generation with Incremental Resume
 
 多批次并行调用 LLM（线程安全去重），中断后从已有输出继续：
 
@@ -144,7 +147,7 @@ knowlyr-datasynth generate ./output/ -n 1000 --resume
 knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
 ```
 
-### 3. Schema Validation and Deduplication
+### 3. Schema 验证与去重 / Schema Validation and Deduplication
 
 生成的数据自动校验，不合规样本被过滤：
 
@@ -152,7 +155,7 @@ knowlyr-datasynth generate ... --max-retries 5 --retry-delay 3 --temperature 0.4
 - **约束检查**: `range`（数值范围）、`enum`（枚举值）、`min_length` / `max_length`
 - **精确去重**: 种子集 + 跨批次，避免重复数据
 
-### 4. Precise Cost Estimation
+### 4. 精确成本估算 / Precise Cost Estimation
 
 按模型实际定价计算成本，`--dry-run` 先估再生：
 
@@ -173,7 +176,7 @@ knowlyr-datasynth generate ./output/ -n 1000 --dry-run
 
 </details>
 
-### 5. Post-Generation Hooks
+### 5. 后置钩子 / Post-Generation Hooks
 
 生成完成后自动触发下游命令（如质检）：
 
@@ -184,7 +187,7 @@ knowlyr-datasynth generate ./output/ -n 1000 \
 
 支持变量: `{analysis_dir}` `{output_path}` `{count}`
 
-### 6. Distribution Statistics
+### 6. 分布统计 / Distribution Statistics
 
 `--stats` 输出字段分布统计报告 (`synthetic.stats.json`)：
 
@@ -194,7 +197,7 @@ knowlyr-datasynth generate ./output/ -n 1000 --stats
 
 ---
 
-## Quick Start
+## 快速开始 / Quick Start
 
 ```bash
 pip install knowlyr-datasynth
@@ -213,7 +216,7 @@ pip install knowlyr-datasynth[all]        # 全部功能
 
 </details>
 
-### API Mode
+### API 模式 / API Mode
 
 ```bash
 export ANTHROPIC_API_KEY=your_key
@@ -228,7 +231,7 @@ knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 1000 --concurrency 3
 knowlyr-datasynth generate ./analysis_output/my_dataset/ -n 1000 --dry-run
 ```
 
-### Interactive Mode (无需 API key)
+### 交互模式 / Interactive Mode（无需 API key）
 
 ```bash
 # 生成 Prompt，在 Claude Code 中手动调用
@@ -277,7 +280,7 @@ knowlyr-datasynth generate ./output/ --config datasynth.config.json
 
 ---
 
-## MCP Server
+## MCP 服务器 / MCP Server
 
 ```json
 {
@@ -294,7 +297,7 @@ knowlyr-datasynth generate ./output/ --config datasynth.config.json
 
 ---
 
-## CLI Reference
+## CLI 参考 / CLI Reference
 
 <details>
 <summary>完整命令列表</summary>
@@ -317,22 +320,22 @@ knowlyr-datasynth generate ./output/ --config datasynth.config.json
 
 ---
 
-## Ecosystem
+## 生态系统 / Ecosystem
 
 <details>
-<summary>Architecture Diagram</summary>
+<summary>架构图</summary>
 
 ```mermaid
 graph LR
-    Radar["Radar<br/>Discovery"] --> Recipe["Recipe<br/>Analysis"]
-    Recipe --> Synth["Synth<br/>Generation"]
-    Recipe --> Label["Label<br/>Annotation"]
-    Synth --> Check["Check<br/>Quality"]
+    Radar["Radar<br/>数据发现"] --> Recipe["Recipe<br/>逆向分析"]
+    Recipe --> Synth["Synth<br/>数据合成"]
+    Recipe --> Label["Label<br/>数据标注"]
+    Synth --> Check["Check<br/>质量验证"]
     Label --> Check
-    Check --> Audit["Audit<br/>Model Audit"]
-    Crew["Crew<br/>Deliberation Engine"]
-    Agent["Agent<br/>RL Framework"]
-    ID["ID<br/>Identity Runtime"]
+    Check --> Audit["Audit<br/>模型审计"]
+    Crew["Crew<br/>协商引擎"]
+    Agent["Agent<br/>RL 框架"]
+    ID["ID<br/>身份运行时"]
     Crew -.->|能力定义| ID
     ID -.->|身份 + 记忆| Crew
     Crew -.->|轨迹 + 奖励| Agent
@@ -351,21 +354,21 @@ graph LR
 
 </details>
 
-| Layer | Project | Description | Repo |
+| 层 | 项目 | 说明 | 仓库 |
 |:---|:---|:---|:---|
-| Discovery | **AI Dataset Radar** | 数据集竞争情报、趋势分析 | [GitHub](https://github.com/liuxiaotong/ai-dataset-radar) |
-| Analysis | **DataRecipe** | 逆向分析、Schema 提取、成本估算 | [GitHub](https://github.com/liuxiaotong/data-recipe) |
-| Production | **DataSynth** | LLM 合成 · 智能模板 · Schema 验证 · 成本精算 | You are here |
-| Production | **DataLabel** | 零服务器标注 · LLM 预标注 · IAA 分析 | [GitHub](https://github.com/liuxiaotong/data-label) |
-| Quality | **DataCheck** | 规则验证、重复检测、分布分析 | [GitHub](https://github.com/liuxiaotong/data-check) |
-| Audit | **ModelAudit** | 蒸馏检测、模型指纹 | [GitHub](https://github.com/liuxiaotong/model-audit) |
-| Identity | **knowlyr-id** | 身份系统 + AI 员工运行时 | [GitHub](https://github.com/liuxiaotong/knowlyr-id) |
-| Deliberation | **Crew** | 对抗式多智能体协商 · 持久记忆进化 · MCP 原生 | [GitHub](https://github.com/liuxiaotong/knowlyr-crew) |
-| Agent Training | **knowlyr-gym** | Gymnasium 风格 RL 框架 · 过程奖励模型 · SFT/DPO/GRPO | [GitHub](https://github.com/liuxiaotong/knowlyr-gym) |
+| 发现 | **AI Dataset Radar** | 数据集竞争情报、趋势分析 | [GitHub](https://github.com/liuxiaotong/ai-dataset-radar) |
+| 分析 | **DataRecipe** | 逆向分析、Schema 提取、成本估算 | [GitHub](https://github.com/liuxiaotong/data-recipe) |
+| 生产 | **DataSynth** | LLM 合成 · 智能模板 · Schema 验证 · 成本精算 | 当前项目 |
+| 生产 | **DataLabel** | 零服务器标注 · LLM 预标注 · IAA 分析 | [GitHub](https://github.com/liuxiaotong/data-label) |
+| 质量 | **DataCheck** | 规则验证、重复检测、分布分析 | [GitHub](https://github.com/liuxiaotong/data-check) |
+| 审计 | **ModelAudit** | 蒸馏检测、模型指纹 | [GitHub](https://github.com/liuxiaotong/model-audit) |
+| 身份 | **knowlyr-id** | 身份系统 + AI 员工运行时 | [GitHub](https://github.com/liuxiaotong/knowlyr-id) |
+| 协商 | **Crew** | 对抗式多智能体协商 · 持久记忆进化 · MCP 原生 | [GitHub](https://github.com/liuxiaotong/knowlyr-crew) |
+| 训练 | **knowlyr-gym** | Gymnasium 风格 RL 框架 · 过程奖励模型 · SFT/DPO/GRPO | [GitHub](https://github.com/liuxiaotong/knowlyr-gym) |
 
 ---
 
-## Development
+## 开发 / Development
 
 ```bash
 git clone https://github.com/liuxiaotong/data-synth.git
@@ -374,11 +377,11 @@ pip install -e ".[all,dev]"
 pytest
 ```
 
-**CI**: GitHub Actions，Python 3.10+。Tag push 自动发布 PyPI + GitHub Release。
+**CI**：GitHub Actions，Python 3.10+。Tag push 自动发布 PyPI + GitHub Release。
 
 ---
 
-## References
+## 参考文献 / References
 
 - **Self-Instruct** — Wang, Y. et al., 2023. *Self-Instruct: Aligning LM with Self-Generated Instructions.* [arXiv:2212.10560](https://arxiv.org/abs/2212.10560) — 自指令生成方法
 - **Alpaca** — Taori, R. et al., 2023. *Stanford Alpaca: An Instruction-following LLaMA Model.* — 种子数据驱动的合成指令生成
@@ -388,12 +391,12 @@ pytest
 
 ---
 
-## License
+## 许可证 / License
 
 [MIT](LICENSE)
 
 ---
 
 <div align="center">
-<sub><a href="https://github.com/liuxiaotong">knowlyr</a> — LLM-powered synthetic dataset generation with quality-diversity optimization</sub>
+<sub><a href="https://github.com/liuxiaotong">knowlyr</a> — LLM 驱动的合成数据生成引擎，质量-多样性优化</sub>
 </div>
