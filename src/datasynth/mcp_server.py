@@ -417,7 +417,7 @@ def create_server() -> "Server":
                     f"- 耗时: {result.duration_seconds:.1f}s",
                 ])
                 if result.stats:
-                    lines.append(f"\n统计概要:")
+                    lines.append("\n统计概要:")
                     lines.append(f"- 总样本数: {result.stats['total_samples']}")
                     for fname, fstat in result.stats.get("fields", {}).items():
                         ftype = fstat.get("type", "unknown")
@@ -647,7 +647,7 @@ def create_server() -> "Server":
             import random
             eval_samples = random.sample(samples, min(sample_size, len(samples))) if sample_size and sample_size < len(samples) else samples
 
-            lines = [f"## 合成数据评估报告", "", f"文件: {data_path}", f"总量: {len(samples)} 条", f"评估样本: {len(eval_samples)} 条", ""]
+            lines = ["## 合成数据评估报告", "", f"文件: {data_path}", f"总量: {len(samples)} 条", f"评估样本: {len(eval_samples)} 条", ""]
 
             # Detect text fields
             text_fields: list[str] = []
@@ -801,7 +801,7 @@ def create_server() -> "Server":
 
             # Generate translation prompt instead of doing actual translation
             lines = [
-                f"## 翻译任务生成",
+                "## 翻译任务生成",
                 "",
                 f"- 源文件: `{data_path.name}` ({len(samples)} 条)",
                 f"- 目标语言: {lang_display} ({target_lang})",
