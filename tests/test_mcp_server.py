@@ -84,6 +84,10 @@ class TestListTools:
             "synthesize_data",
             "validate_data",
             "estimate_synthesis_cost",
+            "synth_evaluate",
+            "synth_augment",
+            "synth_batch",
+            "synth_translate",
         }
 
 
@@ -282,7 +286,7 @@ class TestValidateData:
     async def test_validate_missing_file(self, server):
         content = await _call_tool(
             server, "validate_data",
-            {"data_path": "/nonexistent", "schema_path": "/nonexistent"},
+            {"data_path": "/truly_nonexistent_path_xyz", "schema_path": "/truly_nonexistent_path_xyz"},
         )
         assert "未找到" in content[0].text
 
