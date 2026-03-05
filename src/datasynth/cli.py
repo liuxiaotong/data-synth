@@ -520,12 +520,12 @@ def validate(data_file: str, schema_file: str):
         else:
             valid_count += 1
 
-    click.echo(f"\n结果:")
+    click.echo("\n结果:")
     click.echo(f"  ✓ 合规: {valid_count}")
     click.echo(f"  ✗ 不合规: {error_count}")
 
     if all_errors:
-        click.echo(f"\n错误详情 (前 10 条):")
+        click.echo("\n错误详情 (前 10 条):")
         for idx, errs in all_errors[:10]:
             click.echo(f"  #{idx}: {'; '.join(errs)}")
         if len(all_errors) > 10:
@@ -590,7 +590,7 @@ def init(output: str):
             click.echo(f"  ✓ 已创建: {path}")
 
     if created:
-        click.echo(f"\n快速开始:")
+        click.echo("\n快速开始:")
         click.echo(f"  knowlyr-datasynth create {schema_path} {seeds_path} -o output.json -n 10")
     else:
         click.echo("\n所有文件已存在，未创建新文件。")
