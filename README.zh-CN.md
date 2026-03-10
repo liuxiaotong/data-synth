@@ -6,6 +6,9 @@
 
 <div align="center">
 
+<img src="assets/icon.png" width="128" alt="data-synth icon">
+<br/>
+
 <h1>DataSynth</h1>
 
 <h3>LLM 驱动的合成数据生成引擎<br/>LLM-Powered Synthetic Dataset Generation</h3>
