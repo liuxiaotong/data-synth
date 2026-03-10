@@ -3,6 +3,9 @@
 > **English** | [中文](README.zh-CN.md)
 
 
+<img src="assets/icon.png" width="128" alt="data-synth icon">
+<br/>
+
 <h1>DataSynth</h1>
 
 <h3>LLM-Powered Synthetic Dataset Generation<br/>with Quality-Diversity Optimization</h3>
